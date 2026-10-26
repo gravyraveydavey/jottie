@@ -2,22 +2,22 @@ import AppKit
 import Foundation
 import UserNotifications
 
-/// Banners that belong to amanu.
+/// Banners that belong to jottie.
 ///
 /// The old ones didn't. `osascript -e 'display notification'` posts under
 /// AppleScript's identity, so macOS drew them as Script Editor's, and clicking
 /// one opened Script Editor — an app the person never asked for, showing
-/// nothing about their meeting. It was the honest choice while amanu was a
+/// nothing about their meeting. It was the honest choice while jottie was a
 /// bare binary, because `UNUserNotificationCenter` needs a bundle to belong to.
 ///
-/// Inside `Amanu.app` there is one, so the banner says amanu, carries the
+/// Inside `Jottie.app` there is one, so the banner says jottie, carries the
 /// recording it is about, and clicking it opens that folder. A bare build —
 /// `swift run`, a test — has no bundle to post under and stays silent, which
 /// is the right answer for something nobody installed.
 enum Notifications {
     static var usesNotificationCenter: Bool { Runtime.isBundled }
 
-    private static let sessionKey = "me.samat.amanu.session"
+    private static let sessionKey = "com.gravyraveydavey.jottie.session"
 
     @MainActor
     private static var authorization: Task<Bool, Never>?
@@ -74,7 +74,7 @@ enum Notifications {
             self.onOpen = onOpen
         }
 
-        /// Show the banner even when amanu is the active app: the recording it
+        /// Show the banner even when jottie is the active app: the recording it
         /// announces finished in the background, and the window it would
         /// otherwise be hidden behind may be on another Space.
         nonisolated func userNotificationCenter(

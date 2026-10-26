@@ -10,10 +10,10 @@ import Foundation
 ///   or deferred for want of a model. A summary that arrives on a later sweep
 ///   does not fire it a second time — a Mac with no model to reach would
 ///   otherwise never run the hook at all.
-/// - It never fires while any amanu — this one or another — is still naming
+/// - It never fires while any jottie — this one or another — is still naming
 ///   or summarizing the session. Whichever finishes that work fires it: the
 ///   transcription queue, the sweep at launch and on the network's return,
-///   `amanu process`.
+///   `jottie process`.
 /// - With transcription off it fires once the recording has been archived.
 /// - A session retired without a transcript does not fire it.
 /// - Transcribing a session again owes the hook again.

@@ -12,8 +12,8 @@ struct Check {
     let name: String
     let status: CheckStatus
     let remediation: String?
-    /// The failure said to a person, in the language of amanu's windows, for
-    /// the alert that stops the app starting. `amanu doctor` stays English,
+    /// The failure said to a person, in the language of jottie's windows, for
+    /// the alert that stops the app starting. `jottie doctor` stays English,
     /// like every command's output; this is only for the checks that can
     /// refuse a start, which is where somebody meets them in a window.
     var explained: String? = nil
@@ -57,12 +57,12 @@ enum DoctorReport {
     }
 
     /// Whether a recording is underway, which is invisible from everywhere
-    /// anyone looks before quitting, replacing or reinstalling amanu
+    /// anyone looks before quitting, replacing or reinstalling jottie
     /// (.issues/005 — a quit during a call cost three minutes of it). The
     /// in-progress manifest is the only honest answer on disk: `meta.json`,
-    /// which `amanu sessions` reads, is written when the recording stops.
+    /// which `jottie sessions` reads, is written when the recording stops.
     ///
-    /// Always a warning, never a failure. `allOK` decides whether `amanu
+    /// Always a warning, never a failure. `allOK` decides whether `jottie
     /// doctor` exits non-zero and whether startup refuses to continue, and a
     /// recording in progress must not stop a second copy from starting — the
     /// person running it is the one who needs to be told.
@@ -80,8 +80,8 @@ enum DoctorReport {
             return Check(
                 name: "recording",
                 status: .warn("in progress — " + listed.joined(separator: ", ")),
-                remediation: "stop it in amanu before quitting or replacing the app: the session "
-                    + "is saved either way, but nothing is recorded until amanu runs again"
+                remediation: "stop it in jottie before quitting or replacing the app: the session "
+                    + "is saved either way, but nothing is recorded until jottie runs again"
             )
         }
 
@@ -93,7 +93,7 @@ enum DoctorReport {
             return Check(
                 name: "recording",
                 status: .warn("interrupted and not yet recovered — " + names),
-                remediation: "start amanu: the next launch writes the meta.json that crash left "
+                remediation: "start jottie: the next launch writes the meta.json that crash left "
                     + "unwritten and transcribes the audio"
             )
         }
@@ -101,7 +101,7 @@ enum DoctorReport {
         return Check(name: "recording", status: .ok, remediation: nil)
     }
 
-    /// The config file, when amanu is not doing what it says.
+    /// The config file, when jottie is not doing what it says.
     ///
     /// A warning and not a failure even when the file cannot be read at all:
     /// a failure stops startup, and recording is the one thing a broken config
@@ -124,7 +124,7 @@ enum DoctorReport {
         )
     }
 
-    /// Says out loud what amanu will do on its own, because the surprising
+    /// Says out loud what jottie will do on its own, because the surprising
     /// failure mode of an automatic recorder is not that it fails — it's that
     /// it records something you didn't expect it to.
     static func checkAutoRecord() -> Check {
@@ -225,7 +225,7 @@ enum DoctorReport {
         guard route.preference == "auto" || LLMBackend.names.contains(route.preference) else {
             return Check(
                 name: name,
-                status: .warn("backend \"\(route.preference)\" is not one amanu knows — "
+                status: .warn("backend \"\(route.preference)\" is not one jottie knows — "
                     + "no model will be asked"),
                 remediation: "set it to auto or one of " + LLMBackend.names.joined(separator: ", "))
         }
@@ -300,7 +300,7 @@ enum DoctorReport {
         case "ollama":
             switch facts.ollama {
             case .notAsked:
-                return ("Ollama was not asked", "run amanu doctor")
+                return ("Ollama was not asked", "run jottie doctor")
             case .refused(let why):
                 return ("the Ollama Base URL is refused: \(why)", "fix summary.ollama_base_url")
             case .unreachable:
@@ -315,7 +315,7 @@ enum DoctorReport {
                 return nil
             }
         default:
-            return ("\(backend) is not a backend amanu knows", "choose another backend")
+            return ("\(backend) is not a backend jottie knows", "choose another backend")
         }
     }
 
@@ -379,19 +379,19 @@ enum DoctorReport {
             return Check(
                 name: "microphone",
                 status: .fail("denied"),
-                remediation: "System Settings → Privacy & Security → Microphone → enable for amanu (or your terminal)",
+                remediation: "System Settings → Privacy & Security → Microphone → enable for jottie (or your terminal)",
                 explained: localised(
-                    "Microphone access is denied. Allow amanu in System Settings → Privacy & "
+                    "Microphone access is denied. Allow jottie in System Settings → Privacy & "
                         + "Security → Microphone.",
-                    "Доступ к микрофону запрещён. Разрешите его amanu в Системных настройках → "
+                    "Доступ к микрофону запрещён. Разрешите его jottie в Системных настройках → "
                         + "Конфиденциальность и безопасность → Микрофон.")
             )
         @unknown default:
             return Check(
                 name: "microphone", status: .fail("unknown state"), remediation: nil,
                 explained: localised(
-                    "macOS gave an answer amanu does not know about microphone access.",
-                    "macOS ответила про доступ к микрофону то, чего amanu не знает."))
+                    "macOS gave an answer jottie does not know about microphone access.",
+                    "macOS ответила про доступ к микрофону то, чего jottie не знает."))
         }
     }
 
@@ -413,7 +413,7 @@ enum DoctorReport {
             return Check(
                 name: "system audio",
                 status: .warn("a bare build records SILENT system audio"),
-                remediation: "run Amanu.app — `make app`, then put it in /Applications"
+                remediation: "run Jottie.app — `make app`, then put it in /Applications"
             )
         }
         if let heardAt, heardAt <= now {
@@ -424,7 +424,7 @@ enum DoctorReport {
             return Check(
                 name: "system audio",
                 status: recent ? .ok : .warn("last successful tone test is stale"),
-                remediation: "last successful tone test: \(age); run `amanu setup` to test again"
+                remediation: "last successful tone test: \(age); run `jottie setup` to test again"
             )
         }
         return Check(
@@ -455,9 +455,9 @@ enum DoctorReport {
                 status: .fail("\(root.path) is not writable"),
                 remediation: "check permissions on the directory",
                 explained: localised(
-                    "amanu can't write into the recordings folder \(root.path). Check its "
+                    "jottie can't write into the recordings folder \(root.path). Check its "
                         + "permissions, or choose another in the config file.",
-                    "amanu не может писать в папку записей \(root.path). Проверьте права на неё "
+                    "jottie не может писать в папку записей \(root.path). Проверьте права на неё "
                         + "или укажите другую в файле настроек.")
             )
         }

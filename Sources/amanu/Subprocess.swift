@@ -39,7 +39,7 @@ enum Subprocess {
                         timeout: TimeInterval,
                         isCancelled: @Sendable () -> Bool = { false }) throws -> Output {
         let scratch = FileManager.default.temporaryDirectory
-            .appendingPathComponent("amanu-process-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("jottie-process-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(
             at: scratch, withIntermediateDirectories: false,
             attributes: [.posixPermissions: 0o700])

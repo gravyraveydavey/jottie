@@ -1,6 +1,6 @@
 import Foundation
 
-/// Every setting amanu has, described once: where it lives in the config file,
+/// Every setting jottie has, described once: where it lives in the config file,
 /// what it does, what it defaults to, and whether changing it takes effect now
 /// or at the next launch.
 ///
@@ -39,7 +39,7 @@ enum SettingsSchema {
         /// without having to set it — which is what lets an untouched config
         /// file stay empty and still be readable.
         let defaultValue: Any
-        /// Whether `defaultValue` is the value amanu uses when the key is
+        /// Whether `defaultValue` is the value jottie uses when the key is
         /// absent — which `Config` then reads from here rather than writing
         /// it a second time — or only words saying what happens instead:
         /// "the language of the meeting", "the account's full name".
@@ -158,7 +158,7 @@ enum SettingsSchema {
                   localised(
                       "auto: the cloud engine when there's a key and the network answers, parakeet otherwise.",
                       "auto — облачный движок, когда есть ключ и отвечает сеть, иначе parakeet."),
-                      .choice(["auto", "assemblyai", "openai", "elevenlabs", "parakeet", "whisper", "gigaam"]), default: "auto", askedInSetup: true),
+                      .choice(["auto", "assemblyai", "openai", "elevenlabs", "parakeet", "whisper", "gigaam"]), default: "parakeet", askedInSetup: true),
             Entry(["transcription", "cloud"], localised("Cloud engine", "Облачный движок"),
                   localised(
                       "Which service auto uploads to when a key is available.",
@@ -326,7 +326,7 @@ enum SettingsSchema {
                   localised(
                       "Where the cloud engine's key is read from. ASSEMBLYAI_API_KEY wins over it.",
                       "Откуда читается ключ облачного движка. ASSEMBLYAI_API_KEY важнее."),
-                  .text, describedAs: "~/.config/amanu/keys/assemblyai"),
+                  .text, describedAs: "~/.config/jottie/keys/assemblyai"),
             Entry(["transcription", "assemblyai", "speech_model"],
                   localised("AssemblyAI speech model", "Модель речи AssemblyAI"),
                   localised(
@@ -344,13 +344,13 @@ enum SettingsSchema {
                   localised(
                       "Where the OpenAI transcription key is read from. OPENAI_API_KEY wins over it.",
                       "Откуда читается ключ OpenAI для расшифровки. OPENAI_API_KEY важнее."),
-                  .text, describedAs: "~/.config/amanu/keys/openai"),
+                  .text, describedAs: "~/.config/jottie/keys/openai"),
             Entry(["transcription", "elevenlabs", "api_key_path"],
                   localised("ElevenLabs key file", "Файл ключа ElevenLabs"),
                   localised(
                       "Where the ElevenLabs key is read from. ELEVENLABS_API_KEY wins over it.",
                       "Откуда читается ключ ElevenLabs. ELEVENLABS_API_KEY важнее."),
-                  .text, describedAs: "~/.config/amanu/keys/elevenlabs"),
+                  .text, describedAs: "~/.config/jottie/keys/elevenlabs"),
         ]),
 
         Section(title: localised("Summaries", "Саммари"), entries: [
@@ -401,8 +401,8 @@ enum SettingsSchema {
             Entry(["summary", "ollama_base_url"],
                   localised("Ollama Base URL", "Base URL Ollama"),
                   localised(
-                      "Where Amanu reaches Ollama. Another machine sees the meeting, and must be reached over https — plain http is only accepted on this Mac.",
-                      "Где Amanu находит Ollama. Другая машина увидит содержимое встречи, и адрес у неё "
+                      "Where Jottie reaches Ollama. Another machine sees the meeting, and must be reached over https — plain http is only accepted on this Mac.",
+                      "Где Jottie находит Ollama. Другая машина увидит содержимое встречи, и адрес у неё "
                           + "должен быть https — простой http принимается только на этом маке."),
                   .text, default: "http://127.0.0.1:11434"),
             Entry(["summary", "language"],
@@ -422,7 +422,7 @@ enum SettingsSchema {
                   localised(
                       "Where the Anthropic key is read from. ANTHROPIC_API_KEY wins over it.",
                       "Откуда читается ключ Anthropic. ANTHROPIC_API_KEY важнее."),
-                  .text, describedAs: "~/.config/amanu/keys/anthropic"),
+                  .text, describedAs: "~/.config/jottie/keys/anthropic"),
             Entry(["summary", "openai_api_key_path"],
                   localised("OpenAI key file", "Файл ключа OpenAI"),
                   localised(
@@ -430,7 +430,7 @@ enum SettingsSchema {
                           + "api.openai.com and nowhere else. OPENAI_API_KEY wins over it.",
                       "Откуда читается ключ к API самой OpenAI. Он уходит только на "
                           + "api.openai.com. OPENAI_API_KEY важнее."),
-                  .text, describedAs: "~/.config/amanu/keys/openai"),
+                  .text, describedAs: "~/.config/jottie/keys/openai"),
             Entry(["summary", "openai_compatible_api_key_path"],
                   localised("Compatible server key file", "Файл ключа совместимого сервера"),
                   localised(
@@ -438,7 +438,7 @@ enum SettingsSchema {
                           + "OpenAI's own — OpenRouter, Groq, a server of your own.",
                       "Откуда читается ключ к OpenAI Base URL, когда это не сама OpenAI, — "
                           + "OpenRouter, Groq, свой сервер."),
-                  .text, describedAs: "~/.config/amanu/keys/openai-compatible"),
+                  .text, describedAs: "~/.config/jottie/keys/openai-compatible"),
         ]),
 
         Section(title: localised("Calendar and naming", "Календарь и имена"), entries: [
@@ -492,7 +492,7 @@ enum SettingsSchema {
             // settings are called language and mean other people's words —
             // see `InterfaceLanguage`.
             Entry(["interface_language"],
-                  localised("Language of amanu's own windows", "Язык окон amanu"),
+                  localised("Language of jottie's own windows", "Язык окон jottie"),
                   localised(
                       "auto follows the Mac. Not the language of your meetings, and not the one "
                           + "summaries are written in — those are settings of their own.",
@@ -503,17 +503,17 @@ enum SettingsSchema {
             Entry(["dock_icon"],
                   localised("Show in the Dock", "Показывать в доке"),
                   localised(
-                      "Off makes amanu a menu-bar-only accessory — which the menu bar hides when it runs out of room.",
-                      "Выключено — amanu живёт только в строке меню, а строка меню прячет значок, "
+                      "Off makes jottie a menu-bar-only accessory — which the menu bar hides when it runs out of room.",
+                      "Выключено — jottie живёт только в строке меню, а строка меню прячет значок, "
                           + "когда ей не хватает места."),
                   .toggle, default: true, askedInSetup: true),
             Entry(["menu_bar_icon"],
                   localised("Show in the menu bar", "Показывать в строке меню"),
                   localised(
-                      "Off with the Dock icon too leaves amanu with no icon anywhere: open Amanu "
+                      "Off with the Dock icon too leaves jottie with no icon anywhere: open Jottie "
                           + "again to bring its window back.",
-                      "Выключено вместе со значком в доке — amanu нигде не видно: чтобы вернуть "
-                          + "окно, откройте Amanu ещё раз."),
+                      "Выключено вместе со значком в доке — jottie нигде не видно: чтобы вернуть "
+                          + "окно, откройте Jottie ещё раз."),
                   .toggle, default: true, askedInSetup: true),
             Entry(["window"],
                   localised("Open the window at launch", "Открывать окно при запуске"),
@@ -537,7 +537,7 @@ enum SettingsSchema {
                   localised(
                       "Feature usage with a random installation identifier; no meeting content.",
                       "Использование функций со случайным идентификатором установки; без содержимого встреч."),
-                  .toggle, default: true, askedInSetup: true),
+                  .toggle, default: false, askedInSetup: true),
         ]),
     ] }
 
@@ -716,7 +716,7 @@ enum SettingsSchema {
     /// One entry, and it earns the exception: an API key pasted into the
     /// config file is a secret, and a text field would put it on screen and
     /// into a screenshot. The path to a key file is offered instead. Keys
-    /// listed here still count as known — a setting amanu obeys must never be
+    /// listed here still count as known — a setting jottie obeys must never be
     /// reported as one it ignores.
     static let unrenderedKeys = [
         "transcription.assemblyai.api_key", "transcription.elevenlabs.api_key",

@@ -85,7 +85,7 @@ final class RecordingsWindow: NSObject {
 
         panel.title = localised("Recordings", "Записи")
         panel.isReleasedWhenClosed = false
-        panel.setFrameAutosaveName("amanu.recordings")
+        panel.setFrameAutosaveName("jottie.recordings")
         panel.contentMinSize = NSSize(width: 860, height: 560)
 
         buildTable()
@@ -168,7 +168,7 @@ final class RecordingsWindow: NSObject {
         detailTitle.font = .systemFont(ofSize: 16, weight: .semibold)
         openingLabel.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         // What was said in the meeting, which is the one thing in any of
-        // amanu's windows that is not amanu's to translate. Named so that the
+        // jottie's windows that is not jottie's to translate. Named so that the
         // suite looking for English left in a Russian window knows to walk
         // past it rather than report a person's own words as untranslated.
         openingLabel.identifier = NSUserInterfaceItemIdentifier("meeting-words")
@@ -296,7 +296,7 @@ final class RecordingsWindow: NSObject {
         let split = NSSplitView()
         split.isVertical = false
         split.dividerStyle = .thin
-        split.autosaveName = "amanu.recordings.split"
+        split.autosaveName = "jottie.recordings.split"
         split.setContentHuggingPriority(.defaultLow, for: .vertical)
         split.addArrangedSubview(scroll)
         split.addArrangedSubview(detail)
@@ -349,7 +349,7 @@ final class RecordingsWindow: NSObject {
         return scroll
     }
 
-    /// Show another recordings folder: the one Setup has just moved amanu to.
+    /// Show another recordings folder: the one Setup has just moved jottie to.
     func setRoot(_ folder: URL) {
         root = folder
         rootPath.stringValue = folder.path
@@ -690,7 +690,7 @@ final class RecordingsWindow: NSObject {
     /// What to say when Finish processing came back having done nothing.
     ///
     /// Not always good news, which is how it used to read: the work also
-    /// comes back empty when another amanu — or this one's own queue — has
+    /// comes back empty when another jottie — or this one's own queue — has
     /// the session, and when the config file broke after the button was
     /// offered. Only once both are ruled out does it mean what it says, or
     /// that the transcript could not be read, which the log has.
@@ -909,9 +909,9 @@ final class RecordingsWindow: NSObject {
     static func deleteRefusal(for dir: URL) -> String? {
         guard SessionClaim.isHeld(dir) else { return nil }
         return localised(
-            "amanu is working on this recording right now — transcribing or summarising it. "
+            "jottie is working on this recording right now — transcribing or summarising it. "
                 + "Delete it once that has finished.",
-            "amanu сейчас работает с этой записью — расшифровывает её или пишет саммари. "
+            "jottie сейчас работает с этой записью — расшифровывает её или пишет саммари. "
                 + "Удалите её, когда это закончится.")
     }
 

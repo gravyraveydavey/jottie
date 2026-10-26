@@ -15,7 +15,7 @@ import Network
 /// every time somebody walks past a wifi boundary.
 final class NetworkMonitor: @unchecked Sendable {
     private let monitor = NWPathMonitor()
-    private let queue = DispatchQueue(label: "me.samat.amanu.network")
+    private let queue = DispatchQueue(label: "com.gravyraveydavey.jottie.network")
     private var wasSatisfied: Bool?
     private let onReturn: @Sendable () -> Void
 

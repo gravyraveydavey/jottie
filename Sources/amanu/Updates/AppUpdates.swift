@@ -1,14 +1,14 @@
 import AppKit
 import Sparkle
 
-/// Sparkle, wired to amanu's rule that a recording outranks an update.
+/// Sparkle, wired to jottie's rule that a recording outranks an update.
 ///
 /// Everything policy-shaped lives in `UpdateGate`, which is testable without a
 /// bundle. What is left here is the adapter: start Sparkle when there is a
 /// bundle to update, translate its two questions into the gate's vocabulary,
 /// and hand the menu somewhere to send **Check for updates…**.
 ///
-/// The updater only exists in a real `Amanu.app` on a persistent, writable
+/// The updater only exists in a real `Jottie.app` on a persistent, writable
 /// volume. A bare binary has nothing Sparkle could replace, and a DMG copy is
 /// read-only and disappears when ejected; starting it in either place only
 /// produces a framework that logs its disappointment once a day.
@@ -25,7 +25,8 @@ final class AppUpdates: NSObject, SPUUpdaterDelegate {
     init(gate: UpdateGate) {
         self.gate = gate
         super.init()
-        guard Runtime.supportsPersistentFeatures else { return }
+        guard Runtime.supportsPersistentFeatures,
+              Runtime.appBundle?.object(forInfoDictionaryKey: "SUFeedURL") != nil else { return }
         controller = SPUStandardUpdaterController(
             startingUpdater: true,
             updaterDelegate: self,
@@ -62,9 +63,9 @@ final class AppUpdates: NSObject, SPUUpdaterDelegate {
         let allowed = MainActor.assumeIsolated { gate.mayCheck(kind) }
         guard allowed else {
             throw NSError(
-                domain: "me.samat.amanu.updates",
+                domain: "com.gravyraveydavey.jottie.updates",
                 code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "amanu is recording; the update check can wait."]
+                userInfo: [NSLocalizedDescriptionKey: "jottie is recording; the update check can wait."]
             )
         }
     }

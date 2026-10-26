@@ -1,6 +1,6 @@
 /// What this slice of the binary can do.
 ///
-/// amanu ships as one universal binary, so the same release runs on Apple
+/// jottie ships as one universal binary, so the same release runs on Apple
 /// Silicon and on Intel Macs. The local speech
 /// models are the one thing that does not cross over: they are Core ML
 /// packages compiled for the Neural Engine, and FluidAudio refuses them

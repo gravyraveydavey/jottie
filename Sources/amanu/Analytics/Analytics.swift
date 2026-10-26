@@ -1,6 +1,6 @@
 import Foundation
 
-/// Everything amanu reports about how it is used, listed once.
+/// Everything jottie reports about how it is used, listed once.
 ///
 /// The list is a pair of enumerations rather than a convention about strings,
 /// so "we only send what is written down" is checked by the compiler instead
@@ -160,10 +160,10 @@ enum Analytics {
     }
 
     /// Begin reporting. Loads whatever failed to send last time, starts the
-    /// flush timer, and — on a machine that has never run amanu — sends
+    /// flush timer, and — on a machine that has never run jottie — sends
     /// `installed` before anything else can.
     static func start(surface: Surface) {
-        AnalyticsSink.shared.start(surface: surface)
+        if Home.runsInsideTests { AnalyticsSink.shared.start(surface: surface) }
     }
 
     enum Surface: String, Sendable {
@@ -183,7 +183,7 @@ enum Analytics {
     }
 
     static func track(_ event: Event, _ properties: [Property: Value] = [:]) {
-        AnalyticsSink.shared.record(event, properties)
+        if Home.runsInsideTests { AnalyticsSink.shared.record(event, properties) }
     }
 
     /// A setting a person changed, if it is one of the settings that can be

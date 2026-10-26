@@ -19,7 +19,7 @@ enum DedicatedThread {
             let thread = Thread {
                 continuation.resume(with: Result { try work() })
             }
-            thread.name = "amanu \(name)"
+            thread.name = "jottie \(name)"
             thread.qualityOfService = .userInitiated
             // ggml's graph building recurses; the 512 KB a secondary thread
             // gets by default is not what either library was written for.

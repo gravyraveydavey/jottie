@@ -227,7 +227,7 @@ actor TranscriptionCoordinator {
     /// `resumePending` returns as soon as its drain has started, so a sweep
     /// run straight after it went through the recordings folder alongside
     /// the drain, reaching for the session being settled and filling its log
-    /// with "another amanu has this session".
+    /// with "another jottie has this session".
     func waitUntilIdle() async {
         guard draining else { return }
         await withCheckedContinuation { idleWaiters.append($0) }
@@ -237,7 +237,7 @@ actor TranscriptionCoordinator {
     ///
     /// `enqueue` belongs to the running app: it hands work to a queue, reports
     /// through the menu bar, and leaves a failure in transcribe.log for
-    /// whoever looks. `amanu process` has a person and a terminal instead, so
+    /// whoever looks. `jottie process` has a person and a terminal instead, so
     /// it wants the failure back to print and to exit on. The work is the same
     /// either way, down to pulling one channel out of `audio.m4a` — a settled
     /// session has nothing else left to transcribe from.
@@ -316,7 +316,7 @@ actor TranscriptionCoordinator {
         ])
         await PostProcessor.finish(dir)
         notifyUser(
-            title: localised("amanu — transcript ready", "amanu — расшифровка готова"),
+            title: localised("jottie — transcript ready", "jottie — расшифровка готова"),
             body: dir.lastPathComponent,
             opening: dir)
         StopHook.fireIfOwed(dir, command: onStop())
@@ -341,7 +341,7 @@ actor TranscriptionCoordinator {
         _ dir: URL, with given: TranscriptionEngine? = nil
     ) async throws -> TranscriptionEngine {
         // The one place both routes into transcription meet: the app draining
-        // its queue and `amanu process` given a folder by hand. Claiming here,
+        // its queue and `jottie process` given a folder by hand. Claiming here,
         // before an engine is prepared and long before anything is uploaded,
         // is what keeps two processes from paying twice for one recording.
         // Released in the `defer` so the throw and the local-engine retry give
@@ -349,7 +349,7 @@ actor TranscriptionCoordinator {
         try SessionClaim.acquire(dir, stage: .transcribe)
         defer { SessionClaim.release(dir) }
         // Asked again now that the folder is ours. A session can wait in the
-        // queue while somebody else — `amanu process`, another entry for the
+        // queue while somebody else — `jottie process`, another entry for the
         // same folder — transcribes it, and the claim is what makes the
         // answer to "is there a transcript" stay true until we are done.
         if FileManager.default.fileExists(

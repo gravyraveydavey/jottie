@@ -15,7 +15,7 @@ struct SetupProgressTests {
         #expect(progress.outstanding.isEmpty)
         #expect(progress.next == nil)
         #expect(progress.nextTitle == "Done")
-        #expect(progress.sentence == "Everything amanu needs is granted.")
+        #expect(progress.sentence == "Everything jottie needs is granted.")
     }
 
     @Test("Grants come in the order macOS can ask for them")

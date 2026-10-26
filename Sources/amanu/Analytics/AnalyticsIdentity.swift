@@ -14,8 +14,8 @@ import Foundation
 /// `config.json`, so that a person who turns analytics off can see the line
 /// that says so, and a person who leaves it on never gets a line at all.
 ///
-/// Both files sit in `~/.config/amanu`, which makes "forget everything you
-/// know about me, locally" a single `rm ~/.config/amanu/analytics*.json`.
+/// Both files sit in `~/.config/jottie`, which makes "forget everything you
+/// know about me, locally" a single `rm ~/.config/jottie/analytics*.json`.
 enum AnalyticsIdentity {
     static var path: URL { Home.current.analyticsIdentityFile }
 

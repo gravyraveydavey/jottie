@@ -93,12 +93,12 @@ enum SetupState {
     }
 
     /// Forget that the window has been through, so it opens again — what
-    /// `amanu setup` does when it can't reach a running daemon to ask it
+    /// `jottie setup` does when it can't reach a running daemon to ask it
     /// politely.
     ///
     /// The heard tone is a measurement of the machine, not a record of what
     /// someone has read, so it survives. Deleting the file wholesale meant
-    /// every `amanu setup` threw away the evidence and the window opened
+    /// every `jottie setup` threw away the evidence and the window opened
     /// demanding a system-audio test that had passed minutes earlier.
     static func reset(at stateURL: URL = path) {
         guard

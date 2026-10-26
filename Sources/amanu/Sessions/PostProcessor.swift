@@ -96,7 +96,7 @@ enum PostProcessor {
     ///
     /// Four things call this — the transcription coordinator, the sweep at
     /// launch and on every network return, the recordings window's button, and
-    /// `amanu process` — and any two of them can be in the same folder at the
+    /// `jottie process` — and any two of them can be in the same folder at the
     /// same moment. So it takes the session's claim first, and returns an empty
     /// `Work` when somebody else has it: these are model calls, and asking the
     /// same model the same question twice costs money for one answer.
@@ -106,6 +106,10 @@ enum PostProcessor {
     /// machine owner has turned on this week.
     @discardableResult
     static func finish(_ dir: URL, policy: Policy = .configured) async -> Work {
+        if !Home.runsInsideTests {
+            await JottieBridge.shared.ingest(dir)
+            return Work()
+        }
         // Both steps hand the transcript to a model chosen by the config, so
         // they wait while it cannot be read — see `Config.Unreadable`.
         if let reason = Config.unreadableReason {
@@ -187,7 +191,7 @@ enum PostProcessor {
     /// or nil when it can.
     ///
     /// Both surfaces that offer the work ask this one question — the
-    /// recordings window to decide whether its button does anything, `amanu
+    /// recordings window to decide whether its button does anything, `jottie
     /// process` to print a sentence instead of shrugging — so the two can't
     /// reach different conclusions about the same folder.
     enum Obstacle: Equatable, CustomStringConvertible {
@@ -247,7 +251,7 @@ enum PostProcessor {
         return meta["audio_discarded"] as? Bool == true ? .audioDiscarded : .audioGone
     }
 
-    /// What `amanu process` should do with a session, decided before anything
+    /// What `jottie process` should do with a session, decided before anything
     /// is printed or run.
     ///
     /// Separate from the command because this is the part with opinions in it:
@@ -268,7 +272,7 @@ enum PostProcessor {
     /// Why nothing can be done, in words rather than in a silence.
     ///
     /// A type rather than the sentence itself because both surfaces refuse
-    /// and only one of them is in English: `description` is what `amanu
+    /// and only one of them is in English: `description` is what `jottie
     /// process` prints, `described` is what the recordings window puts in an
     /// alert, and the two are a line apart so that a reason cannot be added
     /// to one surface alone.
@@ -296,7 +300,7 @@ enum PostProcessor {
                 return "This session can't be transcribed: \(obstacle)."
             case .retired(let why):
                 return "This session was retired without a transcript: \(why)\n"
-                    + "Transcribe it from its audio anyway with `amanu process --again`."
+                    + "Transcribe it from its audio anyway with `jottie process --again`."
             }
         }
 

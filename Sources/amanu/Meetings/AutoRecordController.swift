@@ -106,7 +106,7 @@ final class AutoRecordController {
     /// Calendar occurrences already dealt with, keyed by event and start, and
     /// holding the start so old ones can be forgotten. An event identifier is
     /// shared by every occurrence of a recurring event, so keying by it alone
-    /// skipped a weekly meeting from its second week until amanu restarted.
+    /// skipped a weekly meeting from its second week until jottie restarted.
     private var handledOccurrences: [String: Date] = [:]
     private var lastCalendarCheck = Date.distantPast
     private var currentEventEnd: Date?
@@ -545,7 +545,7 @@ final class AutoRecordController {
     /// whether a meeting happened: "app-quit" and "max-duration" mean we
     /// stopped it, not that it ended. Treating those as evidence threw away
     /// the first fifteen seconds of a genuine call that happened to start
-    /// while amanu was being reinstalled (2026.08.18).
+    /// while jottie was being reinstalled (2026.08.18).
     nonisolated static func trailingQuiet(
         for reason: String, settings: Config.AutoRecordSettings
     ) -> TimeInterval? {

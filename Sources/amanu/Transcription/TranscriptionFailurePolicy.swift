@@ -108,7 +108,7 @@ enum TranscriptionFailurePolicy {
             if notify {
                 notifyUser(
                     title: localised(
-                        "amanu — transcription is waiting", "amanu — расшифровка ждёт"),
+                        "jottie — transcription is waiting", "jottie — расшифровка ждёт"),
                     body: dir.lastPathComponent + localised(
                         " — see transcribe.log", " — подробности в transcribe.log"),
                     opening: dir)
@@ -132,7 +132,7 @@ enum TranscriptionFailurePolicy {
                 : "giving up after \(attempts) attempts")
             notifyUser(
                 title: localised(
-                    "amanu — transcription gave up", "amanu — расшифровка не вышла"),
+                    "jottie — transcription gave up", "jottie — расшифровка не вышла"),
                 body: dir.lastPathComponent + localised(
                     " — audio kept, see transcribe.log",
                     " — звук сохранён, подробности в transcribe.log"),
@@ -141,7 +141,7 @@ enum TranscriptionFailurePolicy {
             // Under the session's claim, as every other compression is. The
             // transcription that failed has let go of it by the time its
             // failure is recorded, and in the minutes of encoding the
-            // recordings window or `amanu process` may reach for the same
+            // recordings window or `jottie process` may reach for the same
             // tracks to try again. Whoever has them then keeps them as they
             // are; retired sessions are only compressed to save disk.
             do {
@@ -157,7 +157,7 @@ enum TranscriptionFailurePolicy {
             SessionState.update(dir, with: fields)
             notifyUser(
                 title: localised(
-                    "amanu — transcription failed", "amanu — расшифровка не удалась"),
+                    "jottie — transcription failed", "jottie — расшифровка не удалась"),
                 body: dir.lastPathComponent + localised(
                     " — see transcribe.log", " — подробности в transcribe.log"),
                 opening: dir

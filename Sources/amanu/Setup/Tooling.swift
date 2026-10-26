@@ -1,6 +1,7 @@
 import Foundation
+import JottieKnowledge
 
-/// Finding the command-line tools amanu borrows — `claude`, `codex`, `ollama`
+/// Finding the command-line tools jottie borrows — `claude`, `codex`, `ollama`
 /// — on a machine where they may not be where a list of three paths expects.
 ///
 /// Three things make this harder than `which`, and each of them produces the
@@ -46,16 +47,6 @@ enum Tooling {
             "/opt/homebrew/bin/\(name)",
             "/usr/local/bin/\(name)",
         ]
-    }
-
-    /// Binaries shipped inside a desktop app's bundle. Verified present in
-    /// ChatGPT.app; Claude.app carries no `claude` binary and installs one
-    /// into `~/.local/bin` instead, which `standardLocations` already covers.
-    private static func bundledLocations(for name: String) -> [String] {
-        switch name {
-        case "codex": return ["/Applications/ChatGPT.app/Contents/Resources/codex"]
-        default: return []
-        }
     }
 
     // MARK: - looking
@@ -142,8 +133,9 @@ enum Tooling {
     // MARK: - the search itself
 
     private static func search(for name: String) -> String? {
+        if name == "codex" { let path = CodexInstallation.discover(); return path.isEmpty ? nil : path }
         let fm = FileManager.default
-        if let found = (standardLocations(for: name) + bundledLocations(for: name))
+        if let found = standardLocations(for: name)
             .first(where: { fm.isExecutableFile(atPath: $0) }) {
             return found
         }

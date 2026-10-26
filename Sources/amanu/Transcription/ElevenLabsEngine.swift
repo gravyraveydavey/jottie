@@ -73,7 +73,7 @@ actor ElevenLabsEngine: TranscriptionEngine {
                 let upload: URL
                 if let channel {
                     upload = FileManager.default.temporaryDirectory.appendingPathComponent(
-                        "amanu-elevenlabs-\(UUID().uuidString)-channel\(channel + 1).m4a")
+                        "jottie-elevenlabs-\(UUID().uuidString)-channel\(channel + 1).m4a")
                     do {
                         try await Task.detached(priority: .utility) {
                             try AudioChannelExtractor.extract(

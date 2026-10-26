@@ -2,7 +2,7 @@ import AppKit
 import ArgumentParser
 import Foundation
 
-/// Start or stop a recording in the amanu that is already running.
+/// Start or stop a recording in the jottie that is already running.
 ///
 /// It never records anything itself. System audio is granted to the
 /// application, and a second recorder launched from a terminal captures
@@ -11,7 +11,7 @@ import Foundation
 struct Record: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "record",
-        abstract: "Start or stop recording in the running amanu."
+        abstract: "Start or stop recording in the running jottie."
     )
 
     @Argument(help: "start, stop, or toggle.")
@@ -21,13 +21,13 @@ struct Record: ParsableCommand {
         let answered = MainActor.assumeIsolated { RecordRequest.askRunningApp(action) }
         guard answered else {
             throw CleanExit.message(
-                "amanu isn't running. Start it from the Dock, or `launchctl kickstart "
-                    + "gui/$(id -u)/me.samat.amanu`.")
+                "jottie isn't running. Start it from the Dock, or `launchctl kickstart "
+                    + "gui/$(id -u)/com.gravyraveydavey.jottie`.")
         }
     }
 }
 
-/// The same cross-process doorbell `amanu setup` uses, carrying which of the
+/// The same cross-process doorbell `jottie setup` uses, carrying which of the
 /// three verbs was asked for. Distributed notifications never leave this Mac.
 enum RecordRequest {
     enum Action: String, ExpressibleByArgument, Sendable {
@@ -36,8 +36,8 @@ enum RecordRequest {
         case toggle
     }
 
-    private static let request = Notification.Name("me.samat.amanu.record")
-    private static let acknowledged = Notification.Name("me.samat.amanu.record-ack")
+    private static let request = Notification.Name("com.gravyraveydavey.jottie.record")
+    private static let acknowledged = Notification.Name("com.gravyraveydavey.jottie.record-ack")
 
     @MainActor
     private final class Reply {

@@ -10,6 +10,9 @@ import AppKit
 /// time, and a grant given to the wrong process is worse than no grant.
 @MainActor
 final class SetupWindow: NSObject, NSWindowDelegate {
+    var onShowAnalysisSettings: (() -> Void)? {
+        didSet { form.onShowAnalysisSettings = onShowAnalysisSettings }
+    }
     /// Whether a recording is in progress. Registering at login and testing
     /// system audio both disturb a running recording, and nothing in this
     /// window is worth losing a meeting for.
@@ -34,7 +37,7 @@ final class SetupWindow: NSObject, NSWindowDelegate {
         )
         super.init()
 
-        panel.title = localised("amanu setup", "Первая настройка amanu")
+        panel.title = localised("jottie setup", "Первая настройка jottie")
         panel.isReleasedWhenClosed = false
         panel.delegate = self
         panel.minSize = NSSize(width: 640, height: 460)
@@ -118,7 +121,7 @@ final class SetupWindow: NSObject, NSWindowDelegate {
 
     /// Setup is marked done on the way out however it was dismissed. Asking
     /// once is the promise; a window that comes back every launch until every
-    /// box is ticked would be nagging, and `amanu doctor` still says what is
+    /// box is ticked would be nagging, and `jottie doctor` still says what is
     /// missing.
     private func finish() {
         SetupState.markCompleted()

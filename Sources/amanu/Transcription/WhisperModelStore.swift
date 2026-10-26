@@ -1,6 +1,6 @@
 import Foundation
 
-/// The one Whisper model Amanu supports as a first production default.
+/// The one Whisper model Jottie supports as a first production default.
 /// Downloading, verifying and sharing it is `VerifiedModelStore`'s job.
 struct WhisperModelStore: Sendable {
     typealias Manifest = VerifiedModelStore.Manifest
@@ -28,7 +28,7 @@ struct WhisperModelStore: Sendable {
 
     init(
         directory: URL = Home.current.url
-            .appendingPathComponent("Library/Application Support/amanu/models/whisper", isDirectory: true),
+            .appendingPathComponent("Library/Application Support/jottie/models/whisper", isDirectory: true),
         manifest: Manifest = WhisperModelStore.defaultManifest,
         downloader: @escaping Downloader = { try await ModelDownloader.download(source: $0, partial: $1, progress: $2) }
     ) {

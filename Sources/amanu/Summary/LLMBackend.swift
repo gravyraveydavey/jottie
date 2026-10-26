@@ -202,7 +202,7 @@ struct LLMBackend: Sendable {
         // not know that model here and must not report the API's model as it.
         LLMBackend(name: "codex-cli", model: nil) { system, prompt in
             let output = FileManager.default.temporaryDirectory
-                .appendingPathComponent("amanu-codex-\(UUID().uuidString).txt")
+                .appendingPathComponent("jottie-codex-\(UUID().uuidString).txt")
             defer { try? FileManager.default.removeItem(at: output) }
 
             _ = try await run(

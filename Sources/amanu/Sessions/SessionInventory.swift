@@ -195,7 +195,7 @@ enum SessionInventory {
         )
     }
 
-    /// The same question the re-transcribe button and `amanu process` ask,
+    /// The same question the re-transcribe button and `jottie process` ask,
     /// with the reason dropped: here it is only ever "is there audio".
     private static func audioSurvives(_ dir: URL, meta: [String: Any]) -> Bool {
         PostProcessor.obstacleToTranscribing(dir, meta: meta) == nil

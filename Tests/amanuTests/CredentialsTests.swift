@@ -55,7 +55,7 @@ struct CredentialsTests {
         try withFreshHome { _ in
             let slot = Credentials.summarySlot(for: "openai-api", in: [:])
             #expect(slot.path == Config.openAIKeyPath)
-            #expect(slot.isAmanus)
+            #expect(slot.isJotties)
             #expect(Credentials.transcriptionSlot(for: "openai", in: [:]).path
                 == Config.openAIKeyPath)
         }
@@ -70,7 +70,7 @@ struct CredentialsTests {
             let slot = Credentials.summarySlot(for: "openai-api", in: config)
             #expect(slot.path == Credentials.openAICompatibleKeyPath)
             #expect(slot.path != Config.openAIKeyPath)
-            #expect(slot.isAmanus)
+            #expect(slot.isJotties)
         }
     }
 
@@ -78,24 +78,24 @@ struct CredentialsTests {
     func namedKeyPathIsRespected() throws {
         try withFreshHome { home in
             let inside: [String: Any] = [
-                "summary": ["openai_api_key_path": "~/.config/amanu/keys/router"],
+                "summary": ["openai_api_key_path": "~/.config/jottie/keys/router"],
             ]
             let slot = Credentials.summarySlot(for: "openai-api", in: inside)
             #expect(slot.isNamedInConfig)
-            #expect(slot.path.path == home.url.appendingPathComponent(".config/amanu/keys/router").path)
-            #expect(slot.isAmanus)
+            #expect(slot.path.path == home.url.appendingPathComponent(".config/jottie/keys/router").path)
+            #expect(slot.isJotties)
 
             let shared: [String: Any] = [
                 "summary": ["api_key_path": "~/.config/anthropic/token"],
             ]
             let sharedSlot = Credentials.summarySlot(for: "anthropic-api", in: shared)
             #expect(sharedSlot.isNamedInConfig)
-            #expect(!sharedSlot.isAmanus, "a file other tools share is not amanu's to write")
+            #expect(!sharedSlot.isJotties, "a file other tools share is not amanu's to write")
 
             let assembly: [String: Any] = [
                 "transcription": ["assemblyai": ["api_key_path": "~/elsewhere/key"]],
             ]
-            #expect(!Credentials.transcriptionSlot(for: "assemblyai", in: assembly).isAmanus)
+            #expect(!Credentials.transcriptionSlot(for: "assemblyai", in: assembly).isJotties)
         }
     }
 

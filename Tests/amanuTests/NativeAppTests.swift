@@ -7,7 +7,7 @@ import Testing
 struct NativeAppTests {
     @Test("Only an app on a read-only volume asks to move")
     func diskImageMoveDecision() {
-        let app = URL(fileURLWithPath: "/Volumes/amanu 1.0/Amanu.app")
+        let app = URL(fileURLWithPath: "/Volumes/amanu 1.0/Jottie.app")
 
         #expect(ApplicationRelocation.shouldOfferMove(
             bundleURL: app, volumeIsReadOnly: true))
@@ -19,12 +19,12 @@ struct NativeAppTests {
 
     @Test("A DMG copy cannot promise login launch or automatic updates")
     func persistentFeatureDecision() {
-        let app = URL(fileURLWithPath: "/Volumes/amanu 1.0/Amanu.app")
+        let app = URL(fileURLWithPath: "/Volumes/amanu 1.0/Jottie.app")
 
         #expect(!ApplicationRelocation.supportsPersistentFeatures(
             bundleURL: app, volumeIsReadOnly: true))
         #expect(ApplicationRelocation.supportsPersistentFeatures(
-            bundleURL: URL(fileURLWithPath: "/Applications/Amanu.app"),
+            bundleURL: URL(fileURLWithPath: "/Applications/Jottie.app"),
             volumeIsReadOnly: false))
         #expect(!ApplicationRelocation.supportsPersistentFeatures(
             bundleURL: nil, volumeIsReadOnly: false))
@@ -34,7 +34,7 @@ struct NativeAppTests {
     func installsFromDiskImage() throws {
         let fm = FileManager.default
         let root = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        let source = root.appendingPathComponent("image/Amanu.app")
+        let source = root.appendingPathComponent("image/Jottie.app")
         let applications = root.appendingPathComponent("Applications")
         try fm.createDirectory(
             at: source.appendingPathComponent("Contents"), withIntermediateDirectories: true)
@@ -46,7 +46,7 @@ struct NativeAppTests {
         let installed = try ApplicationRelocation.install(
             from: source, in: applications, fileManager: fm)
 
-        #expect(installed == applications.appendingPathComponent("Amanu.app"))
+        #expect(installed == applications.appendingPathComponent("Jottie.app"))
         #expect(try String(contentsOf: installed.appendingPathComponent("Contents/version"),
                            encoding: .utf8) == "new")
     }
@@ -55,9 +55,9 @@ struct NativeAppTests {
     func replacesInstalledApplication() throws {
         let fm = FileManager.default
         let root = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        let source = root.appendingPathComponent("image/Amanu.app")
+        let source = root.appendingPathComponent("image/Jottie.app")
         let applications = root.appendingPathComponent("Applications")
-        let installed = applications.appendingPathComponent("Amanu.app")
+        let installed = applications.appendingPathComponent("Jottie.app")
         try fm.createDirectory(
             at: source.appendingPathComponent("Contents"), withIntermediateDirectories: true)
         try fm.createDirectory(
@@ -81,14 +81,14 @@ struct NativeAppTests {
     @Test("Window-server arguments are not commands anyone typed")
     func launchServicesArguments() {
         let launched = Runtime.meaningfulArguments([
-            "/Applications/Amanu.app/Contents/MacOS/Amanu",
+            "/Applications/Jottie.app/Contents/MacOS/Jottie",
             "-psn_0_123456",
             "-NSDocumentRevisionsDebugMode", "YES",
         ])
-        #expect(launched == ["/Applications/Amanu.app/Contents/MacOS/Amanu"])
+        #expect(launched == ["/Applications/Jottie.app/Contents/MacOS/Jottie"])
 
         // What a person types survives untouched.
-        let typed = ["amanu", "record", "start", "--out", "/tmp/x"]
+        let typed = ["jottie", "record", "start", "--out", "/tmp/x"]
         #expect(Runtime.meaningfulArguments(typed) == typed)
     }
 
@@ -105,7 +105,7 @@ struct NativeAppTests {
 
         #expect(!Runtime.shouldHandOffToBundle(
             bundle: bundle,
-            environment: ["XPC_SERVICE_NAME": "application.me.samat.amanu.18516703.18517717"]))
+            environment: ["XPC_SERVICE_NAME": "application.com.gravyraveydavey.jottie.18516703.18517717"]))
 
         // A bare build has nowhere to hand over to.
         #expect(!Runtime.shouldHandOffToBundle(
@@ -136,9 +136,9 @@ struct NativeAppTests {
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: dir) }
 
-        let cli = dir.appendingPathComponent("amanu")
-        let app = dir.appendingPathComponent("Amanu.app/Contents/MacOS/Amanu")
-        let older = dir.appendingPathComponent("Older.app/Contents/MacOS/Amanu")
+        let cli = dir.appendingPathComponent("jottie")
+        let app = dir.appendingPathComponent("Jottie.app/Contents/MacOS/Jottie")
+        let older = dir.appendingPathComponent("Older.app/Contents/MacOS/Jottie")
         let day = Date(timeIntervalSince1970: 1_755_000_000)
 
         // A real binary is kept, under a name that says when it was retired.
@@ -146,7 +146,7 @@ struct NativeAppTests {
         #expect(try AgentCLI.link(at: cli, to: app, now: day).get())
         #expect(try fm.destinationOfSymbolicLink(atPath: cli.path) == app.path)
         let backups = try fm.contentsOfDirectory(atPath: dir.path)
-            .filter { $0.hasPrefix("amanu.legacy-") }
+            .filter { $0.hasPrefix("jottie.legacy-") }
         #expect(backups.count == 1)
 
         // Running it again changes nothing and reports so.
@@ -157,7 +157,7 @@ struct NativeAppTests {
         #expect(try AgentCLI.link(at: cli, to: older, now: day).get())
         #expect(try fm.destinationOfSymbolicLink(atPath: cli.path) == older.path)
         #expect(try fm.contentsOfDirectory(atPath: dir.path)
-            .filter { $0.hasPrefix("amanu.legacy-") }.count == 1)
+            .filter { $0.hasPrefix("jottie.legacy-") }.count == 1)
     }
 
     /// The suite used to be run as `AMANU_NO_NOTIFY=1 swift test`, because a
@@ -176,11 +176,11 @@ struct NativeAppTests {
     func notificationCarriesItsSession() {
         let folder = URL(fileURLWithPath: "/Users/x/Recordings/2026.08.18-2300 Standup")
         var userInfo: [AnyHashable: Any] = [:]
-        userInfo["me.samat.amanu.session"] = folder.path
+        userInfo["com.gravyraveydavey.jottie.session"] = folder.path
 
         #expect(Notifications.session(in: userInfo) == folder)
         #expect(Notifications.session(in: [:]) == nil)
-        #expect(Notifications.session(in: ["me.samat.amanu.session": 42]) == nil)
+        #expect(Notifications.session(in: ["com.gravyraveydavey.jottie.session": 42]) == nil)
     }
 }
 
@@ -205,7 +205,7 @@ struct SetupOfferTests {
         menuBar.setupAvailable(false)
         #expect(!menuBar.offeredItemTitles.contains("Setup…"))
 
-        // `amanu setup` resets the marker, and the way back has to be a way
+        // `jottie setup` resets the marker, and the way back has to be a way
         // back: an item that only ever disappears is a one-way door.
         menuBar.setupAvailable(true)
         #expect(menuBar.offeredItemTitles.contains("Setup…"))
@@ -249,16 +249,16 @@ struct SetupOfferTests {
     /// About is where a Mac user looks for a name, and there are two menus
     /// it could be missing from. In the application menu it is also first,
     /// which is where every Mac puts it.
-    @Test("About Amanu is offered in both menus")
+    @Test("About Jottie is offered in both menus")
     @MainActor
     func aboutIsInBothMenus() throws {
         let menuBar = MenuBarController()
         defer { withExtendedLifetime(menuBar) {} }
-        #expect(menuBar.offeredItemTitles.contains("About Amanu"))
+        #expect(menuBar.offeredItemTitles.contains("About Jottie"))
 
         let menu = Run.mainMenu(settingsTarget: AppDelegate())
         let appMenu = try #require(menu.items.first?.submenu)
-        #expect(appMenu.items.first?.title == "About Amanu")
+        #expect(appMenu.items.first?.title == "About Jottie")
     }
 
     /// The window itself: three links, and each going where it says.
@@ -270,7 +270,7 @@ struct SetupOfferTests {
             == ["Samat Galimov ↗", "Source code on GitHub ↗", "Order custom development ↗"])
         #expect(about.offeredLinks.map(\.url) == [
             "https://samat.me",
-            "https://github.com/gsamat/amanu",
+            "https://github.com/gravyraveydavey/jottie",
             "https://fans.dev",
         ])
     }

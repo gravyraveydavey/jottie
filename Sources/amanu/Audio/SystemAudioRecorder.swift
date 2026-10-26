@@ -52,7 +52,7 @@ final class SystemAudioRecorder {
     private var tapID = AudioObjectID(kAudioObjectUnknown)
     private var aggregateID = AudioObjectID(kAudioObjectUnknown)
     private var procID: AudioDeviceIOProcID?
-    private let queue = DispatchQueue(label: "me.samat.amanu.system-tap")
+    private let queue = DispatchQueue(label: "com.gravyraveydavey.jottie.system-tap")
     private let liveAudio = LiveAudioBufferRelay()
     private(set) var isRecording = false
 
@@ -208,7 +208,7 @@ final class SystemAudioRecorder {
         let description = objects.isEmpty
             ? CATapDescription(stereoGlobalTapButExcludeProcesses: [])
             : CATapDescription(stereoMixdownOfProcesses: objects)
-        description.name = "amanu system tap"
+        description.name = "jottie system tap"
         description.isPrivate = true
         description.muteBehavior = .unmuted
 
@@ -240,7 +240,7 @@ final class SystemAudioRecorder {
 
     private func createAggregateDevice(tapUUID: UUID) throws {
         let desc: [String: Any] = [
-            kAudioAggregateDeviceNameKey: "amanu-tap",
+            kAudioAggregateDeviceNameKey: "jottie-tap",
             kAudioAggregateDeviceUIDKey: UUID().uuidString,
             kAudioAggregateDeviceIsPrivateKey: true,
             kAudioAggregateDeviceIsStackedKey: false,

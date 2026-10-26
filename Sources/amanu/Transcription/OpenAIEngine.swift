@@ -4,7 +4,7 @@ import Foundation
 /// OpenAI's diarizing transcription, over the mixed-down session audio.
 ///
 /// The model is `gpt-4o-transcribe-diarize`, and it is the only one of
-/// OpenAI's transcription models amanu can use: the others return running text
+/// OpenAI's transcription models jottie can use: the others return running text
 /// with no timings at all, and a transcript with no clock can be neither
 /// aligned with the recording nor attributed to a speaker. This one returns
 /// segments with start, end and a speaker label — the same shape AssemblyAI
@@ -202,7 +202,7 @@ actor OpenAITranscriptionEngine: TranscriptionEngine {
             suffix: count > 1 ? "\(index + 1)" : nil)
     }
 
-    /// The response as amanu's segments: times moved onto the session clock,
+    /// The response as jottie's segments: times moved onto the session clock,
     /// labels kept apart per piece. Pure, so the shifting and the labelling
     /// are testable without an API key.
     static func segments(
@@ -236,7 +236,7 @@ actor OpenAITranscriptionEngine: TranscriptionEngine {
         )]
     }
 
-    /// The slice of the API response amanu uses. Everything else it returns —
+    /// The slice of the API response jottie uses. Everything else it returns —
     /// usage, logprobs, the task name — is none of our business.
     struct Response: Decodable, Sendable {
         struct Segment: Decodable, Sendable {

@@ -683,7 +683,7 @@ final class MicRecorder: @unchecked Sendable {
     /// under a running engine is silent in every other way — the engine stays
     /// on the device it was built around, and `AVAudioEngineConfigurationChange`
     /// is not posted — so without this listener, choosing another microphone
-    /// mid-meeting leaves amanu recording the old one for the rest of the call.
+    /// mid-meeting leaves jottie recording the old one for the rest of the call.
     private func listenForDefaultInputChanges() {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDefaultInputDevice,
@@ -779,7 +779,7 @@ final class MicRecorder: @unchecked Sendable {
     ///
     /// Restarting raw was justified by "during a call the call app owns echo
     /// cancellation", which is true of what Zoom sends and says nothing about
-    /// what we capture. amanu taps the device itself, so dropping voice
+    /// what we capture. jottie taps the device itself, so dropping voice
     /// processing means the mic writes down whatever the speakers are playing.
     /// On 2026.08.20 that turned the far end into a second voice on our own
     /// track, 3 dB under the real one, for the 35 minutes between an AirPods

@@ -86,7 +86,7 @@ struct MediaNormalizer: MediaNormalizing, Sendable {
         progress: @escaping @Sendable (Double) -> Void
     ) async throws {
         // AVAudioFile is the least surprising path for ordinary audio: it is
-        // the same frame-by-frame conversion used by Amanu's mixer and slicer
+        // the same frame-by-frame conversion used by Jottie's mixer and slicer
         // and does not involve the media-library export services. Movie
         // containers cannot be opened this way and fall through to the asset
         // reader below, which extracts their first audio track.
@@ -135,7 +135,7 @@ struct MediaNormalizer: MediaNormalizing, Sendable {
         let basic = descriptions.first
             .flatMap { CMAudioFormatDescriptionGetStreamBasicDescription($0)?.pointee }
         let sampleRate = Self.outputSampleRate(for: basic?.mSampleRate ?? 48_000)
-        // Imported media is one conversation source, not Amanu's paired
+        // Imported media is one conversation source, not Jottie's paired
         // microphone/system tracks. Keeping ordinary stereo here would make
         // AssemblyAI interpret left and right as separate speakers through
         // its multichannel mode. Downmix at the media boundary instead.

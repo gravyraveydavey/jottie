@@ -4,7 +4,7 @@ import Testing
 @testable import amanu
 
 /// Which engine each session in a queue is given.
-@Suite(.freshHome(config: #"{"offline_echo_cancellation": false}"#))
+@Suite(.freshHome(config: #"{"offline_echo_cancellation": false,"transcription":{"engine":"auto"}}"#))
 struct EngineResolutionTests {
     private static func engine(of session: URL) -> String? {
         PostProcessor.readTranscript(session)?.engine

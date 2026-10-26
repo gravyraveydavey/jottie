@@ -35,11 +35,11 @@ enum ConfigWatch {
     }
 
     /// Announces an edit made to the file by anyone other than this program —
-    /// an editor, `amanu analytics off` from a terminal, a sync tool.
+    /// an editor, `jottie analytics off` from a terminal, a sync tool.
     ///
     /// `didChange` only ever came from `Config.update`, which was enough while
     /// every window was the only writer. It stopped being enough the day a
-    /// broken file started to matter: amanu holds transcription while the file
+    /// broken file started to matter: jottie holds transcription while the file
     /// cannot be read, and the person fixes it in a text editor, so nothing
     /// inside the program would ever have heard that the fix was made.
     ///

@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// Everything amanu keeps for the person running it, and everything it may
+/// Everything jottie keeps for the person running it, and everything it may
 /// borrow from their machine: the config file, the setup and analytics state
 /// beside it, the key drawer, the key files other tools share, the API keys in
 /// the environment, the command-line tools a login shell can find, and the
@@ -37,7 +37,7 @@ struct Home: Sendable {
     /// The environment API keys are read from, or nil for the live process
     /// environment.
     let environment: [String: String]?
-    /// Whether amanu may go looking at this machine: login shells, `--version`
+    /// Whether jottie may go looking at this machine: login shells, `--version`
     /// runs, Ollama's port.
     let discoversTools: Bool
     /// What `LLMBackend.available` hands out, by preference; nil is the real
@@ -69,7 +69,7 @@ struct Home: Sendable {
     /// The home for anything not scoped to another.
     static let process: Home = runsInsideTests ? .sandbox() : .person
 
-    /// The person's own home, exactly as amanu always read it.
+    /// The person's own home, exactly as jottie always read it.
     static var person: Home {
         Home(
             url: FileManager.default.homeDirectoryForCurrentUser,
@@ -82,7 +82,7 @@ struct Home: Sendable {
     /// temporary directory, no environment, no tools and no models.
     static func sandbox(
         at url: URL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("amanu-home-\(UUID().uuidString)", isDirectory: true),
+            .appendingPathComponent("jottie-home-\(UUID().uuidString)", isDirectory: true),
         languageModels: @escaping @Sendable (_ preference: String) -> [LLMBackend] = { _ in [] }
     ) -> Home {
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
@@ -94,7 +94,7 @@ struct Home: Sendable {
     ///
     /// Asked of the image the code itself lives in, not of the process: a
     /// SwiftPM test run is `swiftpm-testing-helper` or `xctest` loading
-    /// `amanuPackageTests.xctest`, and amanu's code is inside that bundle's
+    /// `jottiePackageTests.xctest`, and jottie's code is inside that bundle's
     /// executable. The application and the command line are never loaded from
     /// an `.xctest` bundle, so the answer cannot be true for them — the same
     /// kind of guarantee the missing bundle gives the banners, and pinned by a
@@ -113,7 +113,7 @@ struct Home: Sendable {
     }
 
     var configDirectory: URL {
-        url.appendingPathComponent(".config/amanu", isDirectory: true)
+        url.appendingPathComponent(".config/jottie", isDirectory: true)
     }
 
     var configFile: URL { configDirectory.appendingPathComponent("config.json") }
@@ -129,7 +129,7 @@ struct Home: Sendable {
         ["token", "api_key"].map { url.appendingPathComponent(".config/\(service)/\($0)") }
     }
 
-    var defaultRecordings: URL { url.appendingPathComponent("Recordings", isDirectory: true) }
+    var defaultRecordings: URL { url.appendingPathComponent("Library/Application Support/Jottie/Capture", isDirectory: true) }
 
     /// A path as a person writes it, with `~` meaning this home.
     ///

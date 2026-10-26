@@ -3,12 +3,12 @@ import AppKit
 import EventKit
 import Foundation
 
-/// Asking macOS for what amanu needs, from inside the app rather than from a
+/// Asking macOS for what jottie needs, from inside the app rather than from a
 /// terminal.
 ///
 /// Where the asking happens is not a detail. macOS attributes a grant to the
 /// process that asked for it, so a wizard run from a shell teaches the system
-/// that *Terminal* may record — and amanu, started by launchd, then records a
+/// that *Terminal* may record — and jottie, started by launchd, then records a
 /// full-length silent file with nothing to show for it (.issues/rca-002).
 /// Everything here is called from the setup window, in the daemon.
 @MainActor
@@ -101,7 +101,7 @@ enum SetupPermissions {
         /// A tap was created and it captured the tone we played.
         case heard
         /// A tap was created and captured silence. The interesting failure:
-        /// this is what a terminal-launched amanu records for a whole meeting,
+        /// this is what a terminal-launched jottie records for a whole meeting,
         /// and it is indistinguishable from a quiet room until you play a
         /// sound on purpose — which is what this does.
         case silent
@@ -150,12 +150,12 @@ enum SetupPermissions {
     static func testSystemAudio() async -> SystemAudioResult {
         let recorder = SystemAudioRecorder()
         let scratch = FileManager.default.temporaryDirectory
-            .appendingPathComponent("amanu-tap-test-\(UUID().uuidString).caf")
+            .appendingPathComponent("jottie-tap-test-\(UUID().uuidString).caf")
         defer { try? FileManager.default.removeItem(at: scratch) }
 
         do {
             // Everything, not the call apps: the thing making a noise in a
-            // moment is amanu itself.
+            // moment is jottie itself.
             try recorder.start(writingTo: scratch, scope: .everything)
         } catch {
             Analytics.track(.systemAudioSilent, [

@@ -74,7 +74,7 @@ struct StatusWindowLayoutTests {
         window.show()
 
         let speech = LiveTranscriptState.Entry.speech(.init(
-            speaker: .you, text: "amanu", startMilliseconds: 0, isProvisional: false))
+            speaker: .you, text: "jottie", startMilliseconds: 0, isProvisional: false))
 
         // Idle, which is how the window sits all day. The transcription line
         // is never spoken to here, exactly as it is never spoken to on a Mac

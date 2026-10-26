@@ -24,7 +24,7 @@ struct SetupTests {
 
     @Test("The setup subcommand routes to the setup launcher")
     func setupCommandIsRegistered() throws {
-        let command = try Amanu.parseAsRoot(["setup"])
+        let command = try Jottie.parseAsRoot(["setup"])
         #expect(command is Setup)
     }
 
@@ -67,7 +67,7 @@ struct SetupTests {
         #expect(SetupState.systemAudioHeardAt(at: state) == heard)
         #expect(SetupState.isPending(at: state) == false)
 
-        // `amanu setup` resets the window's own state; a measurement of the
+        // `jottie setup` resets the window's own state; a measurement of the
         // machine is not part of that.
         SetupState.reset(at: state)
         #expect(SetupState.isPending(at: state))
@@ -461,7 +461,7 @@ struct SetupTests {
     func providerCardsCarryPriceAndLink() throws {
         let setup = SetupWindow()
         defer { withExtendedLifetime(setup) {} }
-        let panel = try #require(NSApp.windows.last { $0.title == "amanu setup" })
+        let panel = try #require(NSApp.windows.last { $0.title == "jottie setup" })
         let cards = panel.contentView?.allDescendants.compactMap { $0 as? ChoiceCard } ?? []
 
         let assembly = try #require(cards.first { $0.id == "assemblyai" })
@@ -498,7 +498,7 @@ struct SetupTests {
     func returnInAKeyFieldIsSwallowed() throws {
         let setup = SetupWindow()
         defer { withExtendedLifetime(setup) {} }
-        let panel = try #require(NSApp.windows.last { $0.title == "amanu setup" })
+        let panel = try #require(NSApp.windows.last { $0.title == "jottie setup" })
         let keyFields = panel.contentView?.allDescendants
             .compactMap { $0 as? NSSecureTextField } ?? []
         // Both of them: the cloud key and the summary key sit under the same
@@ -525,7 +525,7 @@ struct SetupTests {
     func summariesSwitchIsFirst() throws {
         let setup = SetupWindow()
         defer { withExtendedLifetime(setup) {} }
-        let panel = try #require(NSApp.windows.last { $0.title == "amanu setup" })
+        let panel = try #require(NSApp.windows.last { $0.title == "jottie setup" })
         let heading = try #require(panel.contentView?.allDescendants
             .compactMap { $0 as? NSTextField }
             .first { $0.stringValue == "Summaries" })
@@ -599,7 +599,7 @@ struct SetupTests {
 
         let note = SetupForm.noIconsNote(menuBar: false, dock: false)
         #expect(note.contains("keeps recording"))
-        #expect(note.contains("open Amanu"))
+        #expect(note.contains("open Jottie"))
     }
 
     /// The window used to ask for a two-letter code in a text field, which
@@ -640,7 +640,7 @@ struct SetupTests {
     func ollamaIsInstallableChoiceCard() throws {
         let setup = SetupWindow()
         defer { withExtendedLifetime(setup) {} }
-        let panel = try #require(NSApp.windows.last { $0.title == "amanu setup" })
+        let panel = try #require(NSApp.windows.last { $0.title == "jottie setup" })
         let ollama = try #require(panel.contentView?.allDescendants
             .compactMap { $0 as? ChoiceCard }
             .first { $0.id == "ollama" })
@@ -660,7 +660,7 @@ struct SetupTests {
     func summaryEndpointsAreVisibleInSetup() throws {
         let setup = SetupWindow()
         defer { withExtendedLifetime(setup) {} }
-        let panel = try #require(NSApp.windows.last { $0.title == "amanu setup" })
+        let panel = try #require(NSApp.windows.last { $0.title == "jottie setup" })
         let fields = panel.contentView?.allDescendants
             .compactMap { $0 as? NSTextField }
         let byID = Dictionary(uniqueKeysWithValues: (fields ?? []).compactMap { field in
@@ -690,7 +690,7 @@ struct SetupTests {
     func localEngineCards() throws {
         let setup = SetupWindow()
         defer { withExtendedLifetime(setup) {} }
-        let panel = try #require(NSApp.windows.last { $0.title == "amanu setup" })
+        let panel = try #require(NSApp.windows.last { $0.title == "jottie setup" })
         let cards = panel.contentView?.allDescendants.compactMap { $0 as? ChoiceCard } ?? []
 
         let parakeet = try #require(cards.first { $0.id == "parakeet" })
@@ -758,7 +758,7 @@ struct SetupTests {
     func settingsReusesTheSetupForm() throws {
         let settings = SettingsWindow()
         defer { withExtendedLifetime(settings) {} }
-        let panel = try #require(NSApp.windows.last { $0.title == "amanu settings" })
+        let panel = try #require(NSApp.windows.last { $0.title == "jottie settings" })
         let tabs = try #require(panel.contentView?.allDescendants
             .compactMap { $0 as? NSTabView }.first)
 
@@ -770,7 +770,7 @@ struct SetupTests {
         #expect(cards.contains { $0.id == "claude-cli" })
     }
 
-    @Test("Usage statistics is the last setup choice and starts on")
+    @Test("Inherited usage statistics control defaults off in Jottie")
     @MainActor
     func analyticsIsLastAndOnByDefault() throws {
         let form = SetupForm()
@@ -782,11 +782,11 @@ struct SetupTests {
         #expect(last.allDescendants.contains { $0 is NSSwitch })
         let setting = try #require(SettingsSchema.sections.flatMap(\.entries)
             .first { $0.path == ["analytics"] })
-        #expect(setting.defaultValue as? Bool == true)
+        #expect(setting.defaultValue as? Bool == false)
     }
 
     /// Setup is a window and also the first tab of Settings, and nothing
-    /// stops both being open: the menu opens either, `amanu setup` rings the
+    /// stops both being open: the menu opens either, `jottie setup` rings the
     /// doorbell for the window, and the first run opens it by itself.
     ///
     /// Whichever one is used, the other has to agree. It did not: the file
@@ -804,8 +804,8 @@ struct SetupTests {
         defer { withExtendedLifetime((setup, settings)) {} }
 
         let panels = [
-            try #require(NSApp.windows.last { $0.title == "amanu setup" }),
-            try #require(NSApp.windows.last { $0.title == "amanu settings" }),
+            try #require(NSApp.windows.last { $0.title == "jottie setup" }),
+            try #require(NSApp.windows.last { $0.title == "jottie settings" }),
         ]
         // One switch, in two windows: the settings copy is on its Setup tab,
         // which is the tab a person lands on.
@@ -837,8 +837,8 @@ struct SetupTests {
             defer { withExtendedLifetime((setup, settings)) {} }
 
             let panels = [
-                try #require(NSApp.windows.last { $0.title == "amanu setup" }),
-                try #require(NSApp.windows.last { $0.title == "amanu settings" }),
+                try #require(NSApp.windows.last { $0.title == "jottie setup" }),
+                try #require(NSApp.windows.last { $0.title == "jottie settings" }),
             ]
             let switches = try panels.map { panel in
                 try Self.control(NSSwitch.self, "files.keep-audio", in: panel.contentView)
@@ -1017,7 +1017,7 @@ struct SetupTests {
     func endingEditingOnAnUntouchedRowWritesNothing() throws {
         let settings = SettingsWindow()
         defer { withExtendedLifetime(settings) {} }
-        let panel = try #require(NSApp.windows.last { $0.title == "amanu settings" })
+        let panel = try #require(NSApp.windows.last { $0.title == "jottie settings" })
 
         // The Advanced tab is built with the window but only installed in the
         // hierarchy while it is the one on screen, so it is reached through
@@ -1068,7 +1068,7 @@ struct SetupTests {
     func outstandingLineFollowsTheForm() throws {
         let settings = SettingsWindow()
         defer { withExtendedLifetime(settings) {} }
-        let panel = try #require(NSApp.windows.last { $0.title == "amanu settings" })
+        let panel = try #require(NSApp.windows.last { $0.title == "jottie settings" })
 
         let truth = settings.outstandingLine
         let label = try #require(panel.contentView?.allDescendants
@@ -1086,7 +1086,7 @@ struct SetupTests {
     /// only appears when something is wrong leaves them counting green ticks.
     @Test("The sentence says the good news as well as the bad")
     func outstandingSentenceShapes() {
-        #expect(SetupForm.sentence(for: []) == "Everything amanu needs is granted.")
+        #expect(SetupForm.sentence(for: []) == "Everything jottie needs is granted.")
         #expect(SetupForm.sentence(for: [.microphone]) == "One thing left: microphone")
         #expect(SetupForm.sentence(for: [.microphone, .systemAudio])
             == "Left: microphone, system audio")

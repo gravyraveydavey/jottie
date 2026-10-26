@@ -15,7 +15,7 @@ struct AnalyticsDeliveryTests {
 
     private func event(_ index: Int) -> [String: Any] {
         ["queue_id": "event-\(index)", "type": "event", "payload": [
-            "website": AnalyticsSink.Endpoint.websiteID, "hostname": "app.amanu.me",
+            "website": AnalyticsSink.Endpoint.websiteID, "hostname": "app.jottie.me",
             "url": "/", "name": "recording_started", "id": "test-installation",
             "timestamp": now.timeIntervalSince1970, "data": ["surface": "app"]]]
     }

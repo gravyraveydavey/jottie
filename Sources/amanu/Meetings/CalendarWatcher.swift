@@ -1,5 +1,6 @@
 import EventKit
 import Foundation
+import JottieModels
 
 /// Reads the local calendars for two things: a real name for the session
 /// folder instead of a bare timestamp, and a second, independent trigger for
@@ -63,15 +64,20 @@ final class CalendarWatcher {
     /// name the session folder even when the recording began some other way.
     /// Prefers something with other people in it over a solo block.
     func bestMatch(for date: Date) -> Meeting? {
-        let candidates = meetings(around: date, slack: 8 * 60)
-        return candidates.first { $0.looksLikeCall } ?? candidates.first
+        let candidates = meetings(around: date, slack: 8 * 60).filter {
+            $0.start <= date.addingTimeInterval(120) && $0.end >= date.addingTimeInterval(-120)
+        }
+        let calls = candidates.filter { $0.looksLikeCall }
+        return calls.count == 1 ? calls.first : (candidates.count == 1 ? candidates.first : nil)
     }
 
     // MARK: -
 
     private func meetings(around date: Date, slack: TimeInterval) -> [Meeting] {
         guard authorized else { return [] }
-        let calendars = store.calendars(for: .event)
+        let settingsURL = Home.current.url.appendingPathComponent("Library/Application Support/Jottie/settings.json")
+        let selected = (try? Codec.decode(LibrarySettings.self, from: Data(contentsOf: settingsURL)))?.selectedCalendarIDs ?? []
+        let calendars = store.calendars(for: .event).filter { Home.runsInsideTests || selected.contains($0.calendarIdentifier) }
         guard !calendars.isEmpty else { return [] }
 
         let predicate = store.predicateForEvents(

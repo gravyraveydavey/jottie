@@ -293,7 +293,7 @@ struct AnalyticsQueueTests {
         #expect(event["type"] as? String == "event")
 
         let payload = try #require(event["payload"] as? [String: Any])
-        #expect(payload["hostname"] as? String == "app.amanu.me")
+        #expect(payload["hostname"] as? String == "app.jottie.me")
         #expect(payload["url"] as? String == "/")
         #expect(payload["name"] as? String == "recording_finished")
         #expect(payload["id"] as? String == "test-identity")
@@ -408,8 +408,8 @@ struct AnalyticsCatalogueSettingsTests {
             (["recordings_dir"], "/Users/someone/Meetings with the board"),
             (["user_name"], "Someone Real"),
             (["on_stop"], "/usr/local/bin/leak.sh"),
-            (["transcription", "assemblyai", "api_key_path"], "~/.config/amanu/keys/assemblyai"),
-            (["summary", "api_key_path"], "~/.config/amanu/keys/anthropic"),
+            (["transcription", "assemblyai", "api_key_path"], "~/.config/jottie/keys/assemblyai"),
+            (["summary", "api_key_path"], "~/.config/jottie/keys/anthropic"),
             (["transcription", "language"], "lv"),
             (["auto_record", "apps"], ["us.zoom.xos"]),
             (["auto_record", "start_delay_seconds"], 12),
@@ -567,7 +567,7 @@ struct AnalyticsCatalogueTests {
     func thePromisesAreOnThePage() throws {
         let page = try Self.page
         #expect(page.contains("amanu analytics off"))
-        #expect(page.contains("~/.config/amanu/analytics"))
+        #expect(page.contains("~/.config/jottie/analytics"))
         #expect(page.contains("specs/2026-08-22-analytics-design.md"))
     }
 }

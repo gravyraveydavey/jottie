@@ -1,5 +1,16 @@
 # Amanu agent instructions
 
+## Jottie macOS pilot
+
+- This fork is Jottie. Preserve Amanu/Quill MIT notices. Biscotti is a reference for behaviour and UX, not a source-code or asset donor.
+- The executable target remains named amanu internally; its public product and CLI are jottie. New modules are JottieModels, JottieLibrary, JottieKnowledge, JottieUI and JottieMCP.
+- Jottie data lives in Library/Application Support/Jottie under the current home; capture preferences use .config/jottie. Never adopt or change an existing Amanu installation's data, credentials, permissions or settings implicitly.
+- Canonical JSON/files own meeting content and logical filing. Search is a disposable SQLite projection; work.sqlite and publication receipts are durable operational state.
+- Transcription is local and audio is deleted only after a durable successful transcript. Codex text analysis is opt-in, with no API fallback. Publication requires explicit subtree/destination configuration.
+- Use synthetic meetings and mocked Codex/Graph responses for development. Live permission, authentication and publication checks must be reported separately from automated tests.
+- Read docs/jottie-pilot.md and docs/jottie-microsoft.md for current behaviour. Inherited upstream reference documents describe features that may be disabled in Jottie.
+- Upstream update/analytics connections and the Makefile's public-release targets are disabled. Configure Jottie's own release ownership before enabling publication.
+
 ## Windows release source
 
 - The current Windows app and release scripts live on `origin/codex/ready-0.6.3`, including the versioned installer implementation merged in PR #29. The branch name reflects its origin, not the version of the next release.

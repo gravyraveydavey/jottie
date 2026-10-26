@@ -3,20 +3,20 @@ import Foundation
 
 /// Which microphone the "me" track should be recording.
 ///
-/// The answer amanu used to give was "whichever one was the default when the
+/// The answer jottie used to give was "whichever one was the default when the
 /// engine started", which is wrong twice over. It is wrong when the default
 /// changes mid-meeting, because `AVAudioEngine` stays on the device it was
 /// built around and says nothing (measured 20 August 2026: the default input
 /// was switched under a running recording and capture carried on with the old
 /// microphone). And it is wrong when the call app is not on the default at
 /// all — pick another microphone in Zoom's settings and Zoom moves, while the
-/// system default, and therefore amanu, does not.
+/// system default, and therefore jottie, does not.
 ///
 /// So the question is asked the way the system-audio tap already asks its own:
 /// follow the call app. `kAudioProcessPropertyDevices` says which device a
 /// process is running input on, and that device — not the default — is the one
 /// the user is talking into. The default is the fallback for everything else:
-/// no call app, no answer from Core Audio, a meeting held in an app amanu does
+/// no call app, no answer from Core Audio, a meeting held in an app jottie does
 /// not know about.
 enum MicRoute {
     struct Device: Equatable {

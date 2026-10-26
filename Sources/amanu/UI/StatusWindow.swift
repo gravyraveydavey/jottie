@@ -73,7 +73,7 @@ final class StatusWindow {
             backing: .buffered,
             defer: false
         )
-        panel.title = "amanu"
+        panel.title = "jottie"
         // An ordinary window at the ordinary level: it goes behind whatever
         // you bring forward, like everything else. State that must be visible
         // without hunting for a window is the Dock icon's job — it turns red
@@ -253,7 +253,7 @@ final class StatusWindow {
             liveScroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 140),
         ])
 
-        panel.setFrameAutosaveName("amanu.status")
+        panel.setFrameAutosaveName("jottie.status")
         if panel.frame.origin == .zero { panel.center() }
         // The autosaved frame remembers whatever height the window last had —
         // including the tall one it takes while a live transcript is running.
@@ -287,7 +287,7 @@ final class StatusWindow {
     /// asked for it by name — the menu item, a second launch, a notification.
     ///
     /// `show` is not enough on its own: ordering a window front while the app
-    /// is in the background moves it only within amanu's own layer, so a
+    /// is in the background moves it only within jottie's own layer, so a
     /// window that was merely behind Safari stays behind Safari and the menu
     /// item reads as having done nothing at all.
     func bringToFront() {

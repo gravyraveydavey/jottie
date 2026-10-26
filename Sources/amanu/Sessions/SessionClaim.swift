@@ -2,7 +2,7 @@ import Foundation
 
 /// `.transcribing.json` — who is working on a session folder right now.
 ///
-/// The app and `amanu process` are two processes over one recordings folder,
+/// The app and `jottie process` are two processes over one recordings folder,
 /// and both are meant to be usable at once: the menu bar drains its queue while
 /// a person runs the command line on a session by hand. Nothing in the folder
 /// said who owned a session, so both could pick up the same one, both upload
@@ -41,7 +41,7 @@ enum SessionClaim {
     struct Holder {
         let pid: Int32
         /// Nil only when the claim was written by something that did not put a
-        /// readable `started` in it; every version of amanu does.
+        /// readable `started` in it; every version of jottie does.
         let started: Date?
         let stage: String
         /// The same liveness test `RecordingSession.recoverInterrupted` uses,
@@ -66,8 +66,8 @@ enum SessionClaim {
         var description: String {
             guard let holder else {
                 return "Something else is already working on this recording: its "
-                    + "\(SessionClaim.file) can't be read, so amanu is leaving the folder "
-                    + "alone. Delete that file if no other copy of amanu is running."
+                    + "\(SessionClaim.file) can't be read, so jottie is leaving the folder "
+                    + "alone. Delete that file if no other copy of jottie is running."
             }
             let what = holder.stage == Stage.finish.rawValue
                 ? "naming and summarizing this recording"
@@ -77,10 +77,10 @@ enum SessionClaim {
             // telling somebody to quit the copy they are reading the message
             // from would be nonsense.
             guard holder.pid != ProcessInfo.processInfo.processIdentifier else {
-                return "This copy of amanu is already \(what) — leaving it to the run "
+                return "This copy of jottie is already \(what) — leaving it to the run "
                     + "that has it."
             }
-            return "Another amanu (pid \(holder.pid)) is already \(what). Let it finish, "
+            return "Another jottie (pid \(holder.pid)) is already \(what). Let it finish, "
                 + "or quit it and run this again."
         }
 
@@ -90,30 +90,30 @@ enum SessionClaim {
             guard let holder else {
                 return localised(
                     "Something else is already working on this recording: its "
-                        + "\(SessionClaim.file) can't be read, so amanu is leaving it alone.",
+                        + "\(SessionClaim.file) can't be read, so jottie is leaving it alone.",
                     "Этой записью уже кто-то занят: её \(SessionClaim.file) не читается, "
-                        + "поэтому amanu её не трогает.")
+                        + "поэтому jottie её не трогает.")
             }
             let finishing = holder.stage == Stage.finish.rawValue
             guard holder.pid != ProcessInfo.processInfo.processIdentifier else {
                 return finishing
                     ? localised(
-                        "amanu is naming and summarizing this recording right now.",
-                        "amanu прямо сейчас подбирает имена и пишет саммари для этой записи.")
+                        "jottie is naming and summarizing this recording right now.",
+                        "jottie прямо сейчас подбирает имена и пишет саммари для этой записи.")
                     : localised(
-                        "amanu is transcribing this recording right now.",
-                        "amanu прямо сейчас расшифровывает эту запись.")
+                        "jottie is transcribing this recording right now.",
+                        "jottie прямо сейчас расшифровывает эту запись.")
             }
             return finishing
                 ? localised(
-                    "Another amanu (pid \(holder.pid)) is naming and summarizing this "
+                    "Another jottie (pid \(holder.pid)) is naming and summarizing this "
                         + "recording. Let it finish, then try again.",
-                    "Другая amanu (pid \(holder.pid)) подбирает имена и пишет саммари для "
+                    "Другая jottie (pid \(holder.pid)) подбирает имена и пишет саммари для "
                         + "этой записи. Дайте ей закончить и попробуйте снова.")
                 : localised(
-                    "Another amanu (pid \(holder.pid)) is transcribing this recording. "
+                    "Another jottie (pid \(holder.pid)) is transcribing this recording. "
                         + "Let it finish, then try again.",
-                    "Другая amanu (pid \(holder.pid)) расшифровывает эту запись. "
+                    "Другая jottie (pid \(holder.pid)) расшифровывает эту запись. "
                         + "Дайте ей закончить и попробуйте снова.")
         }
     }
@@ -121,7 +121,7 @@ enum SessionClaim {
     /// How long an unreadable claim is taken at its word.
     ///
     /// This version never leaves one: the claim is complete before it has its
-    /// name. An older amanu created the file and then filled it, so for an
+    /// name. An older jottie created the file and then filled it, so for an
     /// instant a live claim was empty — and a crash or a full disk in that
     /// instant left an empty claim nothing would ever remove, the session
     /// held for good by nobody. A minute is thousands of times the instant

@@ -190,7 +190,7 @@ struct WindowShots {
         var window: SetupWindow?
         appearance?.performAsCurrentDrawingAppearance { window = SetupWindow() }
         owners.append(try #require(window))
-        let title = localised("amanu setup", "Первая настройка amanu")
+        let title = localised("jottie setup", "Первая настройка amanu")
         let panel = try #require(NSApp.windows.last { $0.title == title })
         panel.appearance = appearance
         return panel
@@ -204,7 +204,7 @@ struct WindowShots {
         var window: SettingsWindow?
         appearance?.performAsCurrentDrawingAppearance { window = SettingsWindow() }
         owners.append(try #require(window))
-        let title = localised("amanu settings", "Настройки amanu")
+        let title = localised("jottie settings", "Настройки amanu")
         let panel = try #require(NSApp.windows.last { $0.title == title })
         panel.appearance = appearance
         return panel
@@ -374,7 +374,7 @@ struct WindowGallery {
             var window: SetupWindow?
             appearance?.performAsCurrentDrawingAppearance { window = SetupWindow() }
             owners.append(try #require(window))
-            let title = localised("amanu setup", "Первая настройка amanu")
+            let title = localised("jottie setup", "Первая настройка amanu")
             let panel = try #require(NSApp.windows.last { $0.title == title })
             panel.appearance = appearance
 
@@ -415,7 +415,7 @@ struct WindowGallery {
             appearance?.performAsCurrentDrawingAppearance { window = StatusWindow() }
             let status = try #require(window)
             owners.append(status)
-            let panel = try #require(NSApp.windows.last { $0.title == "amanu" })
+            let panel = try #require(NSApp.windows.last { $0.title == "jottie" })
             panel.appearance = appearance
 
             status.update(state: .idle, elapsed: nil)

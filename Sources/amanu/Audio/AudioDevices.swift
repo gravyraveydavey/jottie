@@ -39,7 +39,7 @@ enum AudioDevices {
     }
 
     /// Whether the device can record at all. Worth asking, because a process
-    /// doing duplex I/O — anything with voice processing on, amanu included —
+    /// doing duplex I/O — anything with voice processing on, jottie included —
     /// lists its *output* device among the devices it is running input on, and
     /// a speaker is not a microphone.
     static func hasInput(_ device: AudioObjectID) -> Bool {

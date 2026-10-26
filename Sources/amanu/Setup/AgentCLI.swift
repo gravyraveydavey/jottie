@@ -1,8 +1,8 @@
 import Foundation
 
-/// `~/.local/bin/amanu`, kept pointing at the executable inside the bundle.
+/// `~/.local/bin/jottie`, kept pointing at the executable inside the bundle.
 ///
-/// Agents and scripts call amanu by name, and the command line has to be the
+/// Agents and scripts call jottie by name, and the command line has to be the
 /// same signed program as the app — otherwise it isn't talking to the copy
 /// that holds the microphone. A symlink into the installed bundle gives both
 /// for free, and an application update updates the command line with it. A
@@ -10,14 +10,14 @@ import Foundation
 /// as the image was ejected.
 enum AgentCLI {
     static let path = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent(".local/bin/amanu")
+        .appendingPathComponent(".local/bin/jottie")
 
     /// Homebrew's standard prefixes. Finder launches do not inherit the shell's
     /// PATH, so the app cannot ask `command -v`; these are the two locations a
     /// supported macOS Homebrew installation uses on Apple Silicon and Intel.
     static let managedCLIs = [
-        URL(fileURLWithPath: "/opt/homebrew/bin/amanu"),
-        URL(fileURLWithPath: "/usr/local/bin/amanu"),
+        URL(fileURLWithPath: "/opt/homebrew/bin/jottie"),
+        URL(fileURLWithPath: "/usr/local/bin/jottie"),
     ]
 
     /// Called at startup. Returns true when it changed something, so the app

@@ -1,6 +1,6 @@
 import Foundation
 
-/// The small part of Ollama's native API Amanu needs. Keeping request
+/// The small part of Ollama's native API Jottie needs. Keeping request
 /// construction here makes the privacy boundary explicit and lets Setup use
 /// the same configured server as the summarizer.
 enum OllamaClient {
@@ -13,7 +13,7 @@ enum OllamaClient {
         var isRemote: Bool { remoteModel != nil || remoteHost != nil }
     }
 
-    /// The largest context Amanu asks Ollama for. A context is memory: for
+    /// The largest context Jottie asks Ollama for. A context is memory: for
     /// the 8B default, 32k tokens of it is several gigabytes on top of the
     /// weights, which is what a laptop can spare while it records the next
     /// meeting. Prompts that would need more are cut to fit by the caller —

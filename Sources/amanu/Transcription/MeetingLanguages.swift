@@ -18,7 +18,7 @@ import Foundation
 enum MeetingLanguages {
     /// The five that get their own place at the top of the menu, in this
     /// order, ahead of the alphabet. Frequency, not politics: these are the
-    /// languages amanu is actually used in, and a menu you scroll to reach
+    /// languages jottie is actually used in, and a menu you scroll to reach
     /// your own language every time is a menu that was sorted for the
     /// alphabet's benefit rather than yours.
     static let pinned = ["en", "ru", "de", "fr", "es"]
@@ -97,8 +97,8 @@ enum MeetingLanguages {
         expected.count == 1 ? expected.first : nil
     }
 
-    /// The same set as a sentence, for the places that report what amanu is
-    /// about to do rather than do it — `amanu doctor`, and the line under the
+    /// The same set as a sentence, for the places that report what jottie is
+    /// about to do rather than do it — `jottie doctor`, and the line under the
     /// setup window's menu.
     static func describe(_ expected: [String]) -> String {
         let named = expected.map { names[$0] ?? $0 }

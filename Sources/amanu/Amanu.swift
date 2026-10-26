@@ -3,14 +3,14 @@ import ArgumentParser
 import Foundation
 
 @main
-struct Amanu: ParsableCommand {
+struct Jottie: ParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "amanu",
+        commandName: "jottie",
         abstract: "Local meeting recorder + transcriber. Records mic and system audio as two tracks, then transcribes on-device.",
         subcommands: [
             Run.self, Setup.self, Doctor.self, Install.self, Sessions.self, FormatTranscripts.self,
             ProcessSession.self,
-            Record.self, AnalyticsCommand.self,
+            Record.self, AnalyticsCommand.self, MCPCommand.self, LibraryCommand.self, CodexCommand.self,
         ],
         defaultSubcommand: Run.self
     )
@@ -33,10 +33,10 @@ struct Run: ParsableCommand {
 
     @MainActor
     private func runMain() throws {
-        // Someone already recording is the answer to "start amanu": show them
+        // Someone already recording is the answer to "start jottie": show them
         // its window rather than starting a second recorder beside it.
         if SingleInstance.handOverToRunningCopy() {
-            FileHandle.standardError.write(Data("amanu is already running\n".utf8))
+            FileHandle.standardError.write(Data("jottie is already running\n".utf8))
             return
         }
 
@@ -50,32 +50,32 @@ struct Run: ParsableCommand {
 
         // A copy started from a shell is not its own responsible process, so
         // everything it asks macOS for is billed to the terminal: the grants
-        // land on Ghostty or Terminal, Amanu.app never appears in the
+        // land on Ghostty or Terminal, Jottie.app never appears in the
         // permission lists, and the setup window reads the terminal's answers
         // back as if they were its own — green rows for grants this program
         // does not have (.issues/rca-002, and measured again with a signed
-        // bundle on 19 August 2026). The README's `amanu setup` is exactly
+        // bundle on 19 August 2026). The README's `jottie setup` is exactly
         // that shell, on exactly the machine where nothing is granted yet.
         //
         // So the command opens the app and steps aside. What it was asked to
-        // do still happens: `amanu setup` has already marked setup pending,
+        // do still happens: `jottie setup` has already marked setup pending,
         // and the copy LaunchServices starts opens the window itself.
         if Runtime.shouldHandOffToBundle(bundle: Runtime.appBundle), let bundle = Runtime.appBundle {
             // Rebuilt from this command's own options rather than forwarded
-            // from the command line: `amanu setup` reaches here through
+            // from the command line: `jottie setup` reaches here through
             // `Run.parse([])`, and passing "setup" on would send the new copy
             // looking for a running app that is itself.
             let forwarded = ["run"] + (out.map { ["--out", $0] } ?? [])
             if Runtime.handOffToBundle(bundle, arguments: forwarded) {
                 FileHandle.standardError.write(Data(
-                    "opened Amanu.app — permissions belong to the app, not to this terminal\n".utf8))
+                    "opened Jottie.app — permissions belong to the app, not to this terminal\n".utf8))
                 return
             }
             // Carrying on is better than refusing to start, but the grants
             // this copy collects are the terminal's and someone should know.
-            let warning = "warning: could not open Amanu.app; running here instead, and macOS "
+            let warning = "warning: could not open Jottie.app; running here instead, and macOS "
                 + "will attribute any permission granted now to this terminal rather than "
-                + "to amanu\n"
+                + "to jottie\n"
             FileHandle.standardError.write(Data(warning.utf8))
         }
 
@@ -108,7 +108,7 @@ struct Run: ParsableCommand {
             FileHandle.standardError.write(Data("startup checks failed:\n".utf8))
             DoctorReport.print(checks)
             // A failed permission is exactly what the first-run window exists
-            // to repair. `amanu setup` also resets this marker before launching,
+            // to repair. `jottie setup` also resets this marker before launching,
             // so a denied grant can never make the repair UI unreachable.
             if startupAction == .refuse {
                 let alert = NSAlert()
@@ -127,7 +127,7 @@ struct Run: ParsableCommand {
         // setting takes effect at the next launch, and the window says so.
         // Interface language and the NSApplication were settled before the
         // possible move-from-DMG prompt; no window existed before that point.
-        // .regular puts amanu in the Dock and in ⌘-Tab. That's the point: the
+        // .regular puts jottie in the Dock and in ⌘-Tab. That's the point: the
         // menu bar is not a dependable place for the only control surface of a
         // recorder — when it fills up macOS parks the status item off-screen
         // and it stays clickable but invisible. The Dock can't be crowded out.
@@ -169,7 +169,7 @@ struct Run: ParsableCommand {
         sigint.resume()
         signal(SIGINT, SIG_IGN)
 
-        // Logout, restart, `launchctl kickstart -k`, `amanu install
+        // Logout, restart, `launchctl kickstart -k`, `jottie install
         // --uninstall` — all of them send SIGTERM, and the default action for
         // it kills us outright. PCM capture is recoverable after a hard kill,
         // but handling SIGTERM still turns a reboot into a clean stop with a
@@ -182,7 +182,7 @@ struct Run: ParsableCommand {
         sigterm.resume()
         signal(SIGTERM, SIG_IGN)
 
-        // Start/stop from a hotkey tool: kill -USR1 $(pgrep -x amanu)
+        // Start/stop from a hotkey tool: kill -USR1 $(pgrep -x jottie)
         let sigusr1 = DispatchSource.makeSignalSource(signal: SIGUSR1, queue: .main)
         sigusr1.setEventHandler {
             MainActor.assumeIsolated { controller.toggleRecording() }
@@ -191,7 +191,7 @@ struct Run: ParsableCommand {
         signal(SIGUSR1, SIG_IGN)
 
         FileHandle.standardError.write(Data(
-            "amanu up · recordings → \(root.path) · ^C to quit\n".utf8
+            "jottie up · recordings → \(root.path) · ^C to quit\n".utf8
         ))
         app.run()
         // Retained until the run loop exits: NSApp's delegate reference is
@@ -218,7 +218,7 @@ struct Doctor: ParsableCommand {
 /// ticker. All state transitions happen on the main actor.
 @MainActor
 final class AppController {
-    /// Where recordings go. It follows `recordings_dir` while amanu runs —
+    /// Where recordings go. It follows `recordings_dir` while jottie runs —
     /// see `adoptPendingRoot` — unless `--out` named a folder for this run.
     private var root: URL
     private let followsConfiguredRoot: Bool
@@ -227,26 +227,28 @@ final class AppController {
     private var pendingRoot: URL?
     private let menuBar = MenuBarController(visible: Config.menuBarIcon())
     private let window = StatusWindow()
-    /// Built on first use. It is thirty-odd controls, and amanu spends nearly
+    /// Built on first use. It is thirty-odd controls, and jottie spends nearly
     /// all of its life recording rather than being configured.
     private lazy var settings: SettingsWindow = {
         let window = SettingsWindow()
         window.isRecording = { [weak self] in self?.isRecording == true }
+        window.onShowAnalysisSettings = { [weak self] in self?.showSettings() }
         return window
     }()
     /// Built on first use, like the others, and for a stronger reason: most
-    /// copies of amanu will never be asked who wrote them.
+    /// copies of jottie will never be asked who wrote them.
     private lazy var aboutWindow = AboutWindow()
     private lazy var setupWindow: SetupWindow = {
         let setup = SetupWindow()
         setup.isRecording = { [weak self] in self?.isRecording == true }
+        setup.onShowAnalysisSettings = { [weak self] in self?.showSettings() }
         setup.onFinished = { [weak self] in
             self?.startAutomaticFeatures(requestCalendarAccess: false)
             self?.offerSetup()
         }
         return setup
     }()
-    /// Sparkle, and amanu's rule that a meeting outranks an update. Lazy only
+    /// Sparkle, and jottie's rule that a meeting outranks an update. Lazy only
     /// so that its gate can ask `self` whether a recording is running; it is
     /// built in `init` all the same, where the menu asks whether updates are
     /// available at all.
@@ -289,11 +291,11 @@ final class AppController {
     /// How the app menu is told whether to offer **Setup…**; the status
     /// item's own menu is reached directly.
     var onSetupAvailable: ((Bool) -> Void)?
-    /// Takes up every setting that can change while amanu runs, whichever
+    /// Takes up every setting that can change while jottie runs, whichever
     /// window wrote it — see `SettingsApplier`.
     private var settingsApplier: SettingsApplier?
     /// Hears edits made to the config file from outside — above all the one
-    /// that fixes a file amanu could not read.
+    /// that fixes a file jottie could not read.
     private var configDiskWatch: ConfigWatch.DiskWatch?
     /// Whether the config file was unreadable the last time anybody looked,
     /// so that its becoming readable again is acted on once: the sessions
@@ -304,7 +306,7 @@ final class AppController {
     private var activateObserver: NSObjectProtocol?
     private var sleepObserver: NSObjectProtocol?
     /// App Nap throttles timers, network and IPC for an app nobody is looking
-    /// at — which is amanu's normal condition and exactly when it must not be
+    /// at — which is jottie's normal condition and exactly when it must not be
     /// slow. A recorder that answers a request three seconds late has already
     /// missed the beginning of the meeting.
     private var awake: NSObjectProtocol?
@@ -401,8 +403,10 @@ final class AppController {
 
         awake = ProcessInfo.processInfo.beginActivity(
             options: [.userInitiated, .suddenTerminationDisabled, .automaticTerminationDisabled],
-            reason: "amanu watches for meetings and answers its command line")
+            reason: "jottie watches for meetings and answers its command line")
 
+        JottieBridge.shared.start(root: root, onCaptureSettings: { [weak self] in self?.showCaptureSettings() },
+                                  onRecord: { [weak self] in self?.toggleRecording() })
         offerSetup()
         settingsApplier = SettingsApplier(
             apply: { [weak self] change in self?.take(change) },
@@ -449,7 +453,7 @@ final class AppController {
         }
     }
 
-    /// Where amanu is visible: the menu bar, the Dock, both, or neither.
+    /// Where jottie is visible: the menu bar, the Dock, both, or neither.
     ///
     /// Applied while running rather than at the next launch, which is the
     /// whole reason the two switches are safe to offer. Turning off the last
@@ -464,7 +468,7 @@ final class AppController {
         guard NSApp.activationPolicy() != wanted else { return }
         NSApp.setActivationPolicy(wanted)
         // Coming back to .regular hands the menu bar to whatever was in front
-        // while amanu had no place in the switcher, so its own windows are
+        // while jottie had no place in the switcher, so its own windows are
         // left in front of an application menu belonging to someone else.
         if wanted == .regular { NSApp.activate(ignoringOtherApps: true) }
     }
@@ -509,7 +513,7 @@ final class AppController {
         showAutoRecord()
     }
 
-    /// Start or stop by signal — `kill -USR1 $(pgrep -x amanu)` — so a hotkey
+    /// Start or stop by signal — `kill -USR1 $(pgrep -x jottie)` — so a hotkey
     /// tool can drive recording without going through the menu.
     func toggleRecording() { toggle() }
 
@@ -608,6 +612,7 @@ final class AppController {
     /// to happen when the quit came from ⌘Q or the Dock rather than from us.
     /// Idempotent: stopSession does nothing without a session.
     func finishForTermination() {
+        if !Home.runsInsideTests { JottieBridge.shared.stop() }
         // `applicationShouldTerminate` normally waits for this cancellation.
         // Keep the request here too for shutdown paths that skip that hook.
         mediaImportTask?.cancel()
@@ -615,7 +620,7 @@ final class AppController {
         stopSession(reason: "app-quit")
     }
 
-    /// What `amanu record` asks for. Asking to start what is already running,
+    /// What `jottie record` asks for. Asking to start what is already running,
     /// or to stop what isn't, is not an error — it is the state the caller
     /// wanted, and scripts should be able to say it twice.
     private func perform(_ action: RecordRequest.Action) {
@@ -669,7 +674,7 @@ final class AppController {
             path: ["live_transcription", "enabled"], value: enabled ? true : nil)
     }
 
-    /// One setting that changed while amanu was running.
+    /// One setting that changed while jottie was running.
     private func take(_ change: SettingsApplier.Change) {
         switch change {
         case .liveTranscription(let enabled):
@@ -752,7 +757,7 @@ final class AppController {
             ))
             if trigger != .manual {
                 notifyUser(
-                    title: localised("amanu — recording started", "amanu — запись началась"),
+                    title: localised("jottie — recording started", "jottie — запись началась"),
                     body: context.folderSuffix ?? newSession.dir.lastPathComponent,
                     opening: newSession.dir
                 )
@@ -769,7 +774,7 @@ final class AppController {
             // it: an auto-start retrying against the same refusal has nothing
             // new to say the second time.
             notifyUser(
-                title: localised("amanu — recording failed", "amanu — не удалось начать запись"),
+                title: localised("jottie — recording failed", "jottie — не удалось начать запись"),
                 body: "\(error)",
                 replacing: Self.startFailedBanner)
             return false
@@ -777,7 +782,7 @@ final class AppController {
 
         recordingActivity = ProcessInfo.processInfo.beginActivity(
             options: [.userInitiated, .idleSystemSleepDisabled],
-            reason: "amanu is recording a meeting")
+            reason: "jottie is recording a meeting")
 
         guard let newSession = session else { return true }
         let liveEnabled = Config.liveTranscriptionEnabled()
@@ -927,6 +932,7 @@ final class AppController {
 
     /// The recordings folder changed behind the recordings window's back.
     private func sessionsChanged() {
+        if !Home.runsInsideTests { JottieBridge.shared.schedule() }
         if recordingsBuilt { recordings.sessionsChanged() }
     }
 
@@ -943,7 +949,7 @@ final class AppController {
     }
 
     /// Bring the status window up — from the menu, a notification, or a
-    /// second launch of an already-running amanu. All three are someone
+    /// second launch of an already-running jottie. All three are someone
     /// asking for the window this second, so it comes forward rather than
     /// waiting behind whatever they were looking at.
     func showWindow() { window.bringToFront() }
@@ -952,6 +958,10 @@ final class AppController {
     /// status item doesn't bring the app forward, and a settings window you
     /// have to click again before you can type in it is a small insult.
     func showSettings() {
+        JottieBridge.shared.showSettings()
+    }
+
+    func showCaptureSettings() {
         NSApp.activate(ignoringOtherApps: true)
         settings.show()
     }
@@ -966,7 +976,7 @@ final class AppController {
     }
 
     /// First-run setup: opened by the first launch, by the menu item while
-    /// that is still there, and by `amanu setup` at any time.
+    /// that is still there, and by `jottie setup` at any time.
     ///
     /// The command resets the marker before it rings, which is what makes it
     /// the way back to the wizard on a machine that has been through setup —
@@ -984,7 +994,7 @@ final class AppController {
     /// item is a door to a window whose job is over: the form inside it lives
     /// in Settings for good, and what the wizard adds — the order the grants
     /// have to happen in, and the line saying what is still outstanding — has
-    /// been answered by then. `amanu setup` is the way back, and README says
+    /// been answered by then. `jottie setup` is the way back, and README says
     /// so where the menu used to.
     private func offerSetup() {
         let available = SetupState.isPending
@@ -992,7 +1002,7 @@ final class AppController {
         onSetupAvailable?(available)
     }
 
-    /// The Dock icon: show the window, or put it away if amanu was already in
+    /// The Dock icon: show the window, or put it away if jottie was already in
     /// front and it's sitting there.
     func toggleWindow(alreadyActive: Bool) {
         if alreadyActive, window.isVisible {
@@ -1030,6 +1040,7 @@ final class AppController {
     }
 
     private func showRecordings() {
+        if !Home.runsInsideTests { JottieBridge.shared.show(); return }
         // A session put back in the queue should start transcribing now, not
         // at the next launch — the person asking for it is watching.
         recordings.onRetranscribe = { [weak self, transcription] _ in
@@ -1041,7 +1052,7 @@ final class AppController {
     }
 
     /// The elapsed time as the status window shows it. Not private and not
-    /// isolated because `amanu doctor` prints the same number from a command
+    /// isolated because `jottie doctor` prints the same number from a command
     /// that never touches AppKit, and one shape for it is the point.
     nonisolated static func format(_ interval: TimeInterval) -> String {
         let total = Int(interval)

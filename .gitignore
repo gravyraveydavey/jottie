@@ -4,3 +4,5 @@
 .superpowers/
 dist/
 .env.asc
+__pycache__/
+*.py[cod]

@@ -2,16 +2,16 @@ import Foundation
 
 extension Config {
     /// Something wrong with the config file that the person needs to hear
-    /// about, because amanu is doing something other than what the file says.
+    /// about, because jottie is doing something other than what the file says.
     ///
     /// Every surface that could be the one somebody looks at says it: the
     /// menu, the status window, the setup form, the settings window and
-    /// `amanu doctor`. A config problem shown in only one of them is shown to
+    /// `jottie doctor`. A config problem shown in only one of them is shown to
     /// nobody who happened to look at the others.
     enum Problem: Equatable {
         /// The file is there and is not JSON — see `Config.File`.
         case unreadable(reason: String)
-        /// A setting whose value is not of a kind amanu can use — `"enabled":
+        /// A setting whose value is not of a kind jottie can use — `"enabled":
         /// "false"`, a string where a switch belongs — so the default applies
         /// instead. It used to apply without a word, and a quoted `"false"`
         /// reads as off to anybody but a JSON parser.
@@ -27,32 +27,32 @@ extension Config {
                     "config.json не читается — расшифровка и саммари ждут")
             case .unusable:
                 return localised(
-                    "config.json has a setting amanu can't use — see Settings",
-                    "в config.json есть настройка, которую amanu не может использовать, — "
+                    "config.json has a setting jottie can't use — see Settings",
+                    "в config.json есть настройка, которую jottie не может использовать, — "
                         + "см. настройки")
             }
         }
 
         /// The whole account, for the windows with room for it and for the
-        /// doctor: what is wrong, and what amanu is doing instead.
+        /// doctor: what is wrong, and what jottie is doing instead.
         var explanation: String {
             switch self {
             case .unreadable(let reason):
                 return localised(
-                    "config.json can't be read (\(reason)). Until it is fixed, amanu keeps to "
+                    "config.json can't be read (\(reason)). Until it is fixed, jottie keeps to "
                         + "the settings it last read from it — its defaults, with auto-record "
                         + "off, if it never could — and keeps recording, but holds transcription "
                         + "and summaries, sends no usage statistics, and saves no changed settings.",
-                    "config.json не читается (\(reason)). Пока файл не исправлен, amanu держится "
+                    "config.json не читается (\(reason)). Пока файл не исправлен, jottie держится "
                         + "настроек, прочитанных из него в последний раз (а если не смогла "
                         + "прочитать ни разу — настроек по умолчанию с выключенной автозаписью), "
                         + "и продолжает записывать, но расшифровка и саммари ждут, статистика не "
                         + "отправляется, а изменённые настройки не сохраняются.")
             case .unusable(let key, let found, let expected):
                 return localised(
-                    "\(key) in config.json is \(found), which amanu can't use: it expects "
+                    "\(key) in config.json is \(found), which jottie can't use: it expects "
                         + "\(expected), so the default applies.",
-                    "\(key) в config.json — \(found), а amanu ждёт там \(expected), поэтому "
+                    "\(key) в config.json — \(found), а jottie ждёт там \(expected), поэтому "
                         + "действует значение по умолчанию.")
             }
         }
@@ -67,7 +67,7 @@ extension Config {
         }
     }
 
-    /// Every value in the file that amanu passes over for the default.
+    /// Every value in the file that jottie passes over for the default.
     ///
     /// For switches, numbers, lists and text the test is the reader's own — a
     /// toggle is read `as? Bool`, so whatever fails that fails here — which

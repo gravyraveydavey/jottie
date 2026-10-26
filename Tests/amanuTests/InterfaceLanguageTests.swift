@@ -219,9 +219,9 @@ struct InterfaceLanguageTests {
     @MainActor
     func theStudioLinkFollowsTheLanguage() {
         #expect(Self.inLanguage(.english) { AboutWindow().offeredLinks.map(\.url) }
-            == ["https://samat.me", "https://github.com/gsamat/amanu", "https://fans.dev"])
+            == ["https://samat.me", "https://github.com/gravyraveydavey/jottie", "https://fans.dev"])
         #expect(Self.inLanguage(.russian) { AboutWindow().offeredLinks.map(\.url) }
-            == ["https://samat.me", "https://github.com/gsamat/amanu", "https://fansdev.ru"])
+            == ["https://samat.me", "https://github.com/gravyraveydavey/jottie", "https://fansdev.ru"])
     }
 
     /// And the same question of the Advanced tab, which is written from
@@ -247,9 +247,9 @@ struct InterfaceLanguageTests {
     @MainActor
     func theOutstandingSentenceIsTranslated() {
         #expect(Self.inLanguage(.english) { SetupForm.sentence(for: []) }
-            == "Everything amanu needs is granted.")
+            == "Everything jottie needs is granted.")
         #expect(Self.inLanguage(.russian) { SetupForm.sentence(for: []) }
-            == "Всё, что нужно amanu, разрешено.")
+            == "Всё, что нужно jottie, разрешено.")
 
         // A name stays a name in either language; what surrounds it does not.
         let left = Self.inLanguage(.russian) {
@@ -353,11 +353,11 @@ struct InterfaceLanguageTests {
         var transcript = LiveTranscriptState()
         transcript.beginRecording(enabled: true)
         transcript.applyPartial(
-            speaker: .you, text: "amanu", startMilliseconds: 0, epoch: transcript.epoch)
+            speaker: .you, text: "jottie", startMilliseconds: 0, epoch: transcript.epoch)
         transcript.setEnabled(false)
         transcript.setEnabled(true)
         transcript.applyPartial(
-            speaker: .them, text: "amanu", startMilliseconds: 10, epoch: transcript.epoch)
+            speaker: .them, text: "jottie", startMilliseconds: 10, epoch: transcript.epoch)
 
         func snapshot(
             recording: Bool, status: LiveTranscriptionCoordinator.Status
@@ -426,15 +426,15 @@ struct InterfaceLanguageTests {
         let menuBar = MenuBarController()
         menuBar.updatesAvailable(true)
         menuBar.setupAvailable(true)
-        menuBar.updateAutoRecord(enabled: true, decision: "amanu")
+        menuBar.updateAutoRecord(enabled: true, decision: "jottie")
         menuBar.updateConfigProblem(Config.Problem.unreadable(reason: "1").headline)
 
         var found: [String] = []
         for state in [MenuBarController.State.idle, .recording, .paused] {
             menuBar.update(state: state, elapsed: "1:23")
             for status: TranscriptionCoordinator.Status in [
-                .idle, .transcribing(session: "amanu", queued: 0),
-                .transcribing(session: "amanu", queued: 2), .failed(session: "amanu"),
+                .idle, .transcribing(session: "jottie", queued: 0),
+                .transcribing(session: "jottie", queued: 2), .failed(session: "jottie"),
             ] {
                 menuBar.updateTranscription(AppController.transcriptionLine(for: status))
                 found.append(contentsOf: menuBar.offeredItemTitles)
@@ -479,18 +479,18 @@ struct InterfaceLanguageTests {
             try JSONSerialization.data(withJSONObject: [
                 "started": "2026-08-18T09:00:00Z",
                 "duration_seconds": 1800,
-                "title": "amanu",
+                "title": "jottie",
                 "trigger": "mic-activity",
             ]).write(to: dir.appendingPathComponent("meta.json"))
             guard transcript else { return dir }
             try JSONEncoder().encode(Transcript(
                 engine: "parakeet", model: "v3", created_at: "2026-08-18T09:31:00Z",
                 segments: [
-                    .init(speaker: "me", start_ms: 0, end_ms: 2000, text: "amanu"),
-                    .init(speaker: "them A", start_ms: 2000, end_ms: 4000, text: "amanu"),
+                    .init(speaker: "me", start_ms: 0, end_ms: 2000, text: "jottie"),
+                    .init(speaker: "them A", start_ms: 2000, end_ms: 4000, text: "jottie"),
                 ]
             )).write(to: dir.appendingPathComponent("transcript.json"))
-            try SpeakerNames(speakers: ["them A": .init(name: "amanu", source: .manual)])
+            try SpeakerNames(speakers: ["them A": .init(name: "jottie", source: .manual)])
                 .write(to: dir)
             try Data("# amanu\n".utf8).write(to: dir.appendingPathComponent("summary.md"))
             return dir
@@ -589,7 +589,7 @@ struct InterfaceLanguageTests {
         // Names of things, and the shape of a key nobody translates.
         let names = [
             "AssemblyAI", "OpenAI", "OpenAI-compatible", "ElevenLabs", "Anthropic", "Claude Code", "Codex", "Ollama",
-            "sk-ant-…", "sk-…", "amanu",
+            "sk-ant-…", "sk-…", "jottie",
             // The models, named the way their release notes name them.
             "parakeet v3", "parakeet v2", "NVIDIA nemotron",
             "Parakeet", "Parakeet v3", "Whisper large-v3-turbo", "GigaAM v3",

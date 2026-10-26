@@ -133,7 +133,7 @@ struct DoctorSummaryTests {
             return
         }
         #expect(Self.warning(Self.check(summary: ["backend": "olama"], facts: .init()))?
-            .contains("not one amanu knows") == true)
+            .contains("not one jottie knows") == true)
     }
 
     @Test("Naming gets a line of its own only when it has a backend of its own",

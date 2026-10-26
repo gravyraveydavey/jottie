@@ -17,11 +17,13 @@ class UpdateFeedLocationTests(unittest.TestCase):
         self.assertIsNotNone(channel)
         self.assertEqual(channel.findtext("link"), FEED_URL)
 
-    def test_new_builds_check_the_canonical_feed(self) -> None:
+    def test_jottie_builds_do_not_use_the_upstream_feed(self) -> None:
         with INFO_PLIST.open("rb") as source:
             bundle_info = plistlib.load(source)
 
-        self.assertEqual(bundle_info.get("SUFeedURL"), FEED_URL)
+        self.assertIsNone(bundle_info.get("SUFeedURL"))
+        self.assertIsNone(bundle_info.get("SUPublicEDKey"))
+        self.assertEqual(bundle_info["CFBundleIdentifier"], "com.gravyraveydavey.jottie")
 
 
 if __name__ == "__main__":

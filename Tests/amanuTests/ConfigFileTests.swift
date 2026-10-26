@@ -70,7 +70,7 @@ struct ConfigFileTests {
 
     @Test("Analytics is off while the file is broken, whatever the default", .freshHome)
     func analyticsIsOff() throws {
-        #expect(AnalyticsIdentity.isEnabled(), "no file means the default, which is on")
+        #expect(!AnalyticsIdentity.isEnabled(), "Jottie defaults to no telemetry")
         try Home.current.writeConfig(text: Self.broken)
         #expect(!AnalyticsIdentity.isEnabled())
         try Home.current.writeConfig(["analytics": true])
@@ -197,7 +197,7 @@ struct ConfigFileTests {
 
         let settings = SettingsWindow()
         defer { withExtendedLifetime(settings) {} }
-        let panel = try #require(NSApp.windows.last { $0.title == "amanu settings" })
+        let panel = try #require(NSApp.windows.last { $0.title == "jottie settings" })
         #expect(visible(in: panel.contentView).filter { $0 == explanation }.count == 1,
                 "the settings window should say it once, under both tabs")
     }

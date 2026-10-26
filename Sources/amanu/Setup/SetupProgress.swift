@@ -166,7 +166,7 @@ struct SetupProgress: Equatable {
         switch named.count {
         case 0:
             return localised(
-                "Everything amanu needs is granted.", "Всё, что нужно amanu, разрешено.")
+                "Everything jottie needs is granted.", "Всё, что нужно jottie, разрешено.")
         case 1:
             return localised("One thing left: ", "Осталось одно: ") + named[0]
         default:

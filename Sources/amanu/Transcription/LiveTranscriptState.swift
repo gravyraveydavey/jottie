@@ -1,7 +1,7 @@
 import Foundation
 
 enum LiveTranscriptionLanguage {
-    /// Nemotron prompt names are BCP-47 locales, while amanu's existing
+    /// Nemotron prompt names are BCP-47 locales, while jottie's existing
     /// setting intentionally asks for a short language code. Keep the mapping
     /// explicit: inventing a region can silently select the wrong prompt.
     private static let prompts: [String: String] = [

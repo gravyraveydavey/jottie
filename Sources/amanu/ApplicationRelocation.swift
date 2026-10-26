@@ -7,7 +7,7 @@ import Foundation
 /// login item points at a volume that disappears when the image is ejected and
 /// Sparkle cannot replace the bundle. Ask before either of those promises is
 /// made, copy completely, then launch the installed copy through
-/// LaunchServices so macOS continues attributing permissions to Amanu.
+/// LaunchServices so macOS continues attributing permissions to Jottie.
 enum ApplicationRelocation {
     static func shouldOfferMove(bundleURL: URL?, volumeIsReadOnly: Bool) -> Bool {
         guard let bundleURL, bundleURL.pathExtension == "app" else { return false }
@@ -25,7 +25,7 @@ enum ApplicationRelocation {
         (try? url.resourceValues(forKeys: [.volumeIsReadOnlyKey]).volumeIsReadOnly) == true
     }
 
-    /// Copy through a sibling first. If an older Amanu is already installed,
+    /// Copy through a sibling first. If an older Jottie is already installed,
     /// `replaceItemAt` swaps it only after the complete new bundle exists, so
     /// an interrupted copy never leaves half an application in /Applications.
     static func install(
@@ -61,11 +61,11 @@ enum ApplicationRelocation {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.messageText = localised(
-            "Move Amanu to Applications?",
-            "Переместить Amanu в «Программы»?")
+            "Move Jottie to Applications?",
+            "Переместить Jottie в «Программы»?")
         alert.informativeText = localised(
-            "Amanu is running from the disk image. Move it first so Start at Login and automatic updates keep working after the image is ejected.",
-            "Amanu запущена с образа диска. Сначала переместите её, чтобы автозапуск и автообновления работали после извлечения образа.")
+            "Jottie is running from the disk image. Move it first so Start at Login and automatic updates keep working after the image is ejected.",
+            "Jottie запущена с образа диска. Сначала переместите её, чтобы автозапуск и автообновления работали после извлечения образа.")
         alert.addButton(withTitle: localised(
             "Move to Applications", "Переместить в «Программы»"))
         alert.addButton(withTitle: localised("Not Now", "Не сейчас"))
@@ -75,7 +75,7 @@ enum ApplicationRelocation {
             let installed = try install(from: bundleURL)
             guard launch(installed) else {
                 throw NSError(
-                    domain: "me.samat.amanu.install",
+                    domain: "com.gravyraveydavey.jottie.install",
                     code: 1,
                     userInfo: [NSLocalizedDescriptionKey: localised(
                         "The installed copy could not be opened.",
@@ -86,7 +86,7 @@ enum ApplicationRelocation {
             let failure = NSAlert()
             failure.alertStyle = .warning
             failure.messageText = localised(
-                "Amanu couldn't be moved", "Не удалось переместить Amanu")
+                "Jottie couldn't be moved", "Не удалось переместить Jottie")
             failure.informativeText = error.localizedDescription
             failure.addButton(withTitle: "OK")
             failure.runModal()

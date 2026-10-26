@@ -22,23 +22,26 @@
 # runs on Apple Silicon and Intel Macs. Two
 # --arch flags select a multi-arch directory. Ask SwiftPM for its path:
 # Xcode 27's Swift Build engine uses .build/out instead of .build/apple.
-BUILT = $(shell swift build -c release --arch arm64 --arch x86_64 --show-bin-path)/amanu
+BUILT = $(shell swift build -c release --arch arm64 --arch x86_64 --show-bin-path)/jottie
 
 # The application bundle. Assembled by hand rather than by an Xcode project:
 # the package already builds and tests with SwiftPM, and an .app is a
 # directory with a plist in it — a second build system to maintain buys
 # nothing here.
-APP        = .build/Amanu.app
-APP_NAME   = Amanu
+APP        = .build/Jottie.app
+APP_NAME   = Jottie
 VERSION   ?= $(shell cat VERSION)
 MINIMUM_MACOS ?= 14.2
 # A build number that only ever goes up, and says which commit it was.
 BUILD     ?= $(shell git rev-list --count HEAD 2>/dev/null || echo 1)
+# Local UI verification may use an already-built single-architecture executable
+# and the classic icon when Xcode's asset compiler is unavailable.
+PILOT_BUILD ?= 0
 ICON       = Resources/Amanu.icns
 ADAPTIVE_ICON = Resources/Amanu.icon
 BUILT_ICON = .build/app-icon
 DIST       = dist
-DMG        = $(DIST)/amanu-v$(VERSION)-macos-universal.dmg
+DMG        = $(DIST)/jottie-v$(VERSION)-macos-universal.dmg
 
 # Sparkle arrives as a binary framework in SwiftPM's artifact cache. There is
 # no Xcode "Embed Frameworks" phase here, so `make app` copies it in and signs
@@ -60,6 +63,7 @@ WHISPER_FW = $(shell find .build/artifacts/*/WhisperFramework -type d \
 TRANSCRIBE_FW = $(shell find .build/artifacts/*/TranscribeCppFramework -type d \
 	-name CTranscribe.framework -path '*macos-arm64_x86_64*' \
 	-not -path '.build/artifacts/extract/*' 2>/dev/null | head -1)
+MSAL_FW = $(shell find .build/artifacts/microsoft-authentication-library-for-objc -type d -name MSAL.framework -path '*macos-arm64_x86_64*' 2>/dev/null | head -1)
 LOCALVQE_ROOT = .build/localvqe
 LOCALVQE_LIB = $(LOCALVQE_ROOT)/lib/liblocalvqe.dylib
 LOCALVQE_MODEL = $(LOCALVQE_ROOT)/model/localvqe-v1.4-aec-200K-f32.gguf
@@ -75,6 +79,15 @@ SIGN_ID := $(shell security find-identity -v -p codesigning 2>/dev/null \
 endif
 ifeq ($(strip $(SIGN_ID)),)
 SIGN_ID := -
+endif
+
+# Hardened runtime library validation needs a real signing team. Ad-hoc local
+# builds have no Team ID, so dyld rejects their embedded frameworks even when
+# codesign --verify succeeds. Explicitly clear flags for development builds;
+# identity-signed distribution builds retain the hardened runtime.
+SIGN_OPTIONS = --options runtime
+ifeq ($(SIGN_ID),-)
+SIGN_OPTIONS = --options 0
 endif
 
 .PHONY: all build localvqe verify-localvqe app icon run-app identities verify clean release release-dry
@@ -101,17 +114,23 @@ $(ICON):
 app: build $(ICON)
 	@rm -rf $(APP)
 	@mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources/Models $(APP)/Contents/Frameworks
-	@scripts/build-app-icon.sh $(ADAPTIVE_ICON) $(ICON) $(BUILT_ICON) $(MINIMUM_MACOS)
+	@if [ "$(PILOT_BUILD)" = "1" ]; then \
+		mkdir -p $(BUILT_ICON); cp $(ICON) $(BUILT_ICON)/Amanu.icns; \
+	else scripts/build-app-icon.sh $(ADAPTIVE_ICON) $(ICON) $(BUILT_ICON) $(MINIMUM_MACOS); fi
 	@cp $(BUILT) $(APP)/Contents/MacOS/$(APP_NAME)
 	@cp $(LOCALVQE_LIB) $(APP)/Contents/Frameworks/liblocalvqe.dylib
+	@cp -R $(MSAL_FW) $(APP)/Contents/Frameworks/MSAL.framework
 	@cp $(LOCALVQE_MODEL) $(APP)/Contents/Resources/Models/
 	@cp $(LOCALVQE_ROOT)/verification.json $(APP)/Contents/Resources/LocalVQE-verification.json
 	@sed -e 's/__SHORT_VERSION__/$(VERSION)/' -e 's/__BUILD_VERSION__/$(BUILD)/' \
 		Packaging/Amanu-Info.plist > $(APP)/Contents/Info.plist
 	@printf 'APPL????' > $(APP)/Contents/PkgInfo
-	@cp $(BUILT_ICON)/Amanu.icns $(APP)/Contents/Resources/Amanu.icns
-	@cp $(BUILT_ICON)/Assets.car $(APP)/Contents/Resources/Assets.car
+	@cp $(BUILT_ICON)/Amanu.icns $(APP)/Contents/Resources/Jottie.icns
+	@if [ -f $(BUILT_ICON)/Assets.car ]; then cp $(BUILT_ICON)/Assets.car $(APP)/Contents/Resources/Assets.car; fi
+	@for resource in $$(dirname "$(BUILT)")/*.bundle; do \
+		[ ! -d "$$resource" ] || cp -R "$$resource" $(APP)/Contents/Resources/; done
 	@mkdir -p $(APP)/Contents/Resources/Licenses
+	@cp Resources/Licenses/* $(APP)/Contents/Resources/Licenses/
 	@cp LICENSE $(APP)/Contents/Resources/LICENSE
 	@cp THIRD-PARTY-NOTICES.md $(APP)/Contents/Resources/
 	@cp $(LOCALVQE_ROOT)/licenses/LocalVQE-LICENSE $(APP)/Contents/Resources/Licenses/
@@ -137,12 +156,12 @@ app: build $(ICON)
 	@cp Resources/Licenses/transcribe.cpp-miniz-LICENSE \
 		$(APP)/Contents/Resources/Licenses/transcribe.cpp-miniz-LICENSE
 	@test -s $(APP)/Contents/Resources/LICENSE \
-		&& test -s $(APP)/Contents/Resources/Amanu.icns \
-		&& test -s $(APP)/Contents/Resources/Assets.car \
+		&& test -s $(APP)/Contents/Resources/Jottie.icns \
+		&& { [ "$(PILOT_BUILD)" = "1" ] || test -s $(APP)/Contents/Resources/Assets.car; } \
 		&& test -s $(APP)/Contents/Resources/THIRD-PARTY-NOTICES.md \
 		&& test -s $(APP)/Contents/Resources/Models/localvqe-v1.4-aec-200K-f32.gguf \
 		&& test -s $(APP)/Contents/Resources/LocalVQE-verification.json \
-		&& test "$$(find $(APP)/Contents/Resources/Licenses -type f | wc -l | tr -d ' ')" = 12
+		&& test "$$(find $(APP)/Contents/Resources/Licenses -type f | wc -l | tr -d ' ')" = 21
 	@test -n "$(SPARKLE_FW)" || (echo "Sparkle.framework not found — run swift build first"; exit 1)
 	@test -n "$(WHISPER_FW)" || (echo "whisper.framework not found — run swift build first"; exit 1)
 	@test -n "$(TRANSCRIBE_FW)" || (echo "CTranscribe.framework not found — run swift build first"; exit 1)
@@ -169,39 +188,41 @@ app: build $(ICON)
 	@# install; amanu is not sandboxed, so they are two more binaries to sign,
 	@# notarize and ship for nothing.
 	@rm -rf $(APP)/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices
-	@[ -x $(HOME)/.local/bin/unlock-signing-keychain ] \
-		&& $(HOME)/.local/bin/unlock-signing-keychain >/dev/null 2>&1 || true
+	@if [ "$(SIGN_ID)" != "-" ] && [ -x $(HOME)/.local/bin/unlock-signing-keychain ]; then \
+		$(HOME)/.local/bin/unlock-signing-keychain >/dev/null 2>&1 || true; fi
 	@echo "signing app as: $(SIGN_ID)"
 	@# Innermost first. codesign seals what it finds, so anything signed after
 	@# the app that contains it invalidates the app's own seal — and the failure
 	@# shows up as a Gatekeeper rejection on someone else's Mac, not here.
 	@for nested in \
 		$(APP)/Contents/Frameworks/liblocalvqe.dylib \
+		$(APP)/Contents/Frameworks/MSAL.framework \
 		$(APP)/Contents/Frameworks/whisper.framework \
 		$(APP)/Contents/Frameworks/CTranscribe.framework \
 		$(APP)/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate \
 		$(APP)/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app \
 		$(APP)/Contents/Frameworks/Sparkle.framework ; do \
-		codesign --force --sign "$(SIGN_ID)" --options runtime --timestamp "$$nested" \
+		codesign --force --sign "$(SIGN_ID)" $(SIGN_OPTIONS) --timestamp "$$nested" \
 			2>/dev/null \
-		|| codesign --force --sign "$(SIGN_ID)" --options runtime --timestamp=none "$$nested" ; \
+		|| codesign --force --sign "$(SIGN_ID)" $(SIGN_OPTIONS) --timestamp=none "$$nested" ; \
 	done
 	@codesign --force --sign "$(SIGN_ID)" \
-		--identifier me.samat.amanu \
-		--options runtime \
+		--identifier com.gravyraveydavey.jottie \
+		$(SIGN_OPTIONS) \
 		--entitlements Packaging/Amanu.entitlements \
 		--timestamp $(APP) 2>/dev/null \
 	|| codesign --force --sign "$(SIGN_ID)" \
-		--identifier me.samat.amanu \
-		--options runtime \
+		--identifier com.gravyraveydavey.jottie \
+		$(SIGN_OPTIONS) \
 		--entitlements Packaging/Amanu.entitlements \
 		--timestamp=none $(APP)
 	@codesign --verify --strict --verbose=2 $(APP)
+	@python3 scripts/verify-app-launch.py $(APP)
 	@# A missing slice is invisible until someone on the wrong Mac opens the
 	@# disk image, so fail here instead.
-	@lipo -archs $(APP)/Contents/MacOS/$(APP_NAME) | grep -q x86_64 \
+	@[ "$(PILOT_BUILD)" = "1" ] || { lipo -archs $(APP)/Contents/MacOS/$(APP_NAME) | grep -q x86_64 \
 		&& lipo -archs $(APP)/Contents/MacOS/$(APP_NAME) | grep -q arm64 \
-		|| (echo "not universal: $$(lipo -archs $(APP)/Contents/MacOS/$(APP_NAME))"; exit 1)
+		|| (echo "not universal: $$(lipo -archs $(APP)/Contents/MacOS/$(APP_NAME))"; exit 1); }
 	@lipo -archs $(APP)/Contents/Frameworks/liblocalvqe.dylib | grep -q x86_64 \
 		&& lipo -archs $(APP)/Contents/Frameworks/liblocalvqe.dylib | grep -q arm64 \
 		|| (echo "LocalVQE not universal: $$(lipo -archs $(APP)/Contents/Frameworks/liblocalvqe.dylib)"; exit 1)
@@ -231,10 +252,12 @@ verify:
 # notarization, a draft GitHub release, the signed appcast, and only then
 # anything public. scripts/release.sh says what it needs.
 release:
-	@scripts/release.sh
+	@echo "Configure Jottie signing, repository and update-feed ownership before publishing."
+	@exit 1
 
 release-dry:
-	@scripts/release.sh --dry-run
+	@echo "Use make app for the local Jottie pilot; upstream publication is disabled."
+	@exit 1
 
 clean:
 	swift package clean

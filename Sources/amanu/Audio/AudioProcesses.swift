@@ -2,7 +2,7 @@ import AppKit
 import CoreAudio
 import Foundation
 
-/// The system's per-process audio objects (macOS 14.4+), which are how amanu
+/// The system's per-process audio objects (macOS 14.4+), which are how jottie
 /// answers both of its questions about other apps: who is holding the
 /// microphone, and whose output should end up on the far-end track.
 enum AudioProcesses {
@@ -116,7 +116,7 @@ enum AudioProcesses {
     /// app is actually listening to, asked of the system rather than inferred
     /// from whatever happens to be the default.
     ///
-    /// A process doing duplex I/O lists its output device here too (amanu's
+    /// A process doing duplex I/O lists its output device here too (jottie's
     /// own voice-processing capture reports the speakers alongside the
     /// microphone), so callers filter by `AudioDevices.hasInput`.
     static func inputDevices(of process: Process) -> [AudioObjectID] {

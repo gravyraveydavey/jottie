@@ -3,7 +3,7 @@ import Darwin
 import Foundation
 
 /// One revision-pinned model file, downloaded once per Mac however many parts
-/// of amanu want it at the same moment.
+/// of jottie want it at the same moment.
 ///
 /// The URL is pinned to an immutable revision and the file's size and digest
 /// are checked after every download. A response reaching 100% therefore is
@@ -11,7 +11,7 @@ import Foundation
 /// canonical path.
 ///
 /// Four things can ask for the same model at once — the setup window, the
-/// settings window, the transcription queue, and `amanu process` in another
+/// settings window, the transcription queue, and `jottie process` in another
 /// process — and they used to share one `.partial` path with nothing between
 /// them: each deleted the other's half-downloaded file and started again from
 /// zero, and whichever finished first verified a file somebody else was still

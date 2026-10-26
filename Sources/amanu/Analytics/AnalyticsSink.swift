@@ -31,15 +31,15 @@ final class AnalyticsSink: @unchecked Sendable {
     /// Where events go. Umami's website id is public: it selects the dataset
     /// but grants no read access.
     enum Endpoint {
-        static let url = URL(string: "https://stats.amanu.me/api/batch")!
+        static let url = URL(string: "https://telemetry.invalid/disabled")!
         static let websiteID = "8ece1241-c45f-4976-9b20-d7004b2359b8"
         static var isConfigured: Bool { !websiteID.hasPrefix("UMAMI_WEBSITE_ID_REPLACE") }
     }
 
     static let shared = AnalyticsSink()
 
-    /// Beside the identifier, so that forgetting everything amanu knows about
-    /// this machine stays one `rm ~/.config/amanu/analytics*.json`.
+    /// Beside the identifier, so that forgetting everything jottie knows about
+    /// this machine stays one `rm ~/.config/jottie/analytics*.json`.
     static var defaultStore: URL { Home.current.analyticsPendingFile }
 
     /// Past this the backlog is somebody who has been offline for a month,
@@ -54,7 +54,7 @@ final class AnalyticsSink: @unchecked Sendable {
     /// that happens.
     typealias Identity = @Sendable () -> (id: String, isFirstRun: Bool)
 
-    private let queue = DispatchQueue(label: "me.samat.amanu.analytics")
+    private let queue = DispatchQueue(label: "com.gravyraveydavey.jottie.analytics")
     private let store: URL
     private let transport: Transport
     private let clock: @Sendable () -> Date
@@ -188,9 +188,9 @@ final class AnalyticsSink: @unchecked Sendable {
             "queue_id": UUID().uuidString,
             "type": "event",
             "payload": [
-                "hostname": "app.amanu.me",
+                "hostname": "app.jottie.me",
                 "url": "/",
-                "title": "Amanu",
+                "title": "Jottie",
                 "language": InterfaceLanguage.current.rawValue,
                 "website": Endpoint.websiteID,
                 "name": event.rawValue,
@@ -438,7 +438,7 @@ final class AnalyticsSink: @unchecked Sendable {
         let version = AnalyticsCatalogue.appVersion() ?? "development"
         let os = ProcessInfo.processInfo.operatingSystemVersion
         return "Mozilla/5.0 (Macintosh; Intel Mac OS X \(os.majorVersion)_\(os.minorVersion)) "
-            + "Amanu/\(version)"
+            + "Jottie/\(version)"
     }
 
     // MARK: - for tests

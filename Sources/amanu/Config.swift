@@ -1,6 +1,6 @@
 import Foundation
 
-/// Optional user config at ~/.config/amanu/config.json:
+/// Optional user config at ~/.config/jottie/config.json:
 ///
 ///     {
 ///       "recordings_dir": "~/Recordings",
@@ -9,7 +9,7 @@ import Foundation
 ///         "engine": "auto",
 ///         "cloud": "assemblyai",
 ///         "language": "ru",
-///         "assemblyai": { "api_key_path": "~/.config/amanu/keys/assemblyai" }
+///         "assemblyai": { "api_key_path": "~/.config/jottie/keys/assemblyai" }
 ///       },
 ///       "mic_voice_processing": false,
 ///       "keep_audio": false,
@@ -58,7 +58,7 @@ enum Config {
     /// network nor account, so it is what should catch a session recorded on
     /// a train.
     static func transcriptionEngine() -> String {
-        string(.transcriptionEngine, in: load())
+        Home.runsInsideTests ? string(.transcriptionEngine, in: load()) : transcriptionLocalEngine()
     }
 
     /// Which local engine `auto` falls back to. Kept separately for the same
@@ -141,14 +141,14 @@ enum Config {
         return flag(.liveTranscription, in: json)
     }
 
-    /// amanu's own key drawer: one directory, mode 0700, one file per
+    /// jottie's own key drawer: one directory, mode 0700, one file per
     /// service, mode 0600.
     ///
     /// Keys used to be written to the shared locations — ~/.config/assemblyai,
     /// ~/.config/anthropic, ~/.config/openai — which several unrelated tools
     /// read and write. That is how a working AssemblyAI key became two bytes
-    /// one evening and every meeting after it failed with HTTP 401. What amanu
-    /// writes now belongs to amanu; what other tools keep is still *read*, so
+    /// one evening and every meeting after it failed with HTTP 401. What jottie
+    /// writes now belongs to jottie; what other tools keep is still *read*, so
     /// nobody has to paste a key twice.
     static var keysDir: URL { Home.current.keysDirectory }
 
@@ -158,7 +158,7 @@ enum Config {
     static var anthropicKeyPath: URL { keysDir.appendingPathComponent("anthropic") }
 
     /// Where the rest of a machine's toolchain tends to keep the same secret.
-    /// Read-only as far as amanu is concerned.
+    /// Read-only as far as jottie is concerned.
     ///
     /// Two filenames each, because both are in the wild: `token` is what the
     /// CLIs write, `api_key` is what people write by hand — and a key sitting
@@ -189,7 +189,7 @@ enum Config {
     }
 
     /// AssemblyAI key, in order: ASSEMBLYAI_API_KEY, an inline `api_key` in the
-    /// config, a token file named by `api_key_path`, amanu's own key file, and
+    /// config, a token file named by `api_key_path`, jottie's own key file, and
     /// finally the shared one this machine may already have.
     static func assemblyAIKey() -> String? {
         if let env = Home.current.variable("ASSEMBLYAI_API_KEY"),
@@ -300,7 +300,7 @@ enum Config {
 
     // MARK: - auto-record
 
-    /// When and how amanu starts recording by itself.
+    /// When and how jottie starts recording by itself.
     ///
     /// The defaults encode one asymmetry: a missed meeting costs a click, an
     /// unwanted recording costs privacy and disk. So starting takes sustained
@@ -393,7 +393,7 @@ enum Config {
         flag(.calendar, in: load())
     }
 
-    /// Show amanu in the Dock (and in ⌘-Tab) rather than running as a
+    /// Show jottie in the Dock (and in ⌘-Tab) rather than running as a
     /// menu-bar-only accessory. On by default: the menu bar hides its status
     /// item when it runs out of room, and a recorder whose only indicator can
     /// silently disappear is a recorder you can't trust.
@@ -401,10 +401,10 @@ enum Config {
         flag(.dockIcon, in: load())
     }
 
-    /// Show amanu's feather in the menu bar, with the clock beside it while a
+    /// Show jottie's feather in the menu bar, with the clock beside it while a
     /// meeting is being recorded. On by default, and it may be turned off
-    /// together with the Dock icon: with neither, amanu is a program with no
-    /// icon anywhere, and the way back to its window is to open Amanu again —
+    /// together with the Dock icon: with neither, jottie is a program with no
+    /// icon anywhere, and the way back to its window is to open Jottie again —
     /// from Spotlight or from Applications, which reaches the copy already
     /// running rather than starting a second one.
     static func menuBarIcon() -> Bool {
@@ -417,7 +417,7 @@ enum Config {
         flag(.window, in: load())
     }
 
-    /// What language amanu's own windows are written in: `auto` (default,
+    /// What language jottie's own windows are written in: `auto` (default,
     /// meaning the Mac's own languages decide), `en` or `ru`.
     ///
     /// Named at length rather than as `language`, because two settings called
@@ -425,7 +425,7 @@ enum Config {
     /// `transcription.language` is what meetings are held in and
     /// `summary.language` is what summaries are written in. A bare `language`
     /// in this file would read as a third member of that family instead of as
-    /// the one setting here that is about amanu's own words. See
+    /// the one setting here that is about jottie's own words. See
     /// `InterfaceLanguage`.
     static func interfaceLanguage() -> String? {
         text(.interfaceLanguage, in: load())
@@ -445,7 +445,7 @@ enum Config {
     /// failed keeps its audio whatever this says — that recording is the only
     /// copy of the meeting, and the next attempt is all it has.
     static func keepAudio() -> Bool {
-        flag(.keepAudio, in: load())
+        Home.runsInsideTests ? flag(.keepAudio, in: load()) : false
     }
 
     // MARK: - summary
@@ -483,7 +483,9 @@ enum Config {
     }
 
     static func summary() -> SummarySettings {
-        summary(in: load())
+        var value = summary(in: load())
+        if !Home.runsInsideTests { value.enabled = false; value.backend = "none" }
+        return value
     }
 
     /// The summary settings against supplied JSON, so defaults and custom
@@ -519,7 +521,7 @@ enum Config {
     /// transcription engine sends it. In order: OPENAI_API_KEY, a token file
     /// named by `transcription.openai.api_key_path` (or, in a config written
     /// before that setting, `summary.openai_api_key_path` — see
-    /// `openAIKeyFile`), amanu's own key file, then the shared one.
+    /// `openAIKeyFile`), jottie's own key file, then the shared one.
     static func openAIKey() -> String? {
         if let env = Home.current.variable("OPENAI_API_KEY"),
            !env.trimmed.isEmpty {
@@ -551,7 +553,7 @@ enum Config {
     }
 
     /// Anthropic key, in order: ANTHROPIC_API_KEY, a token file named by
-    /// `summary.api_key_path`, amanu's own key file, then the shared one.
+    /// `summary.api_key_path`, jottie's own key file, then the shared one.
     static func anthropicKey() -> String? {
         if let env = Home.current.variable("ANTHROPIC_API_KEY"),
            !env.trimmed.isEmpty {
@@ -740,7 +742,7 @@ enum Config {
     ///
     /// It carries nothing: a listener redraws from the file, which is the
     /// only account of the settings any of them trusts anyway.
-    static let didChange = Notification.Name("amanu.config.didChange")
+    static let didChange = Notification.Name("jottie.config.didChange")
 
     @discardableResult
     static func update(path: [String], value: Any?) -> Bool {

@@ -1,7 +1,7 @@
 import ArgumentParser
 import Foundation
 
-/// `amanu analytics` — what is being sent, and the switch.
+/// `jottie analytics` — what is being sent, and the switch.
 ///
 /// The identifier is printed because it is the only way somebody can ask for
 /// their own data to be removed: it is the whole of what the server knows
@@ -9,7 +9,7 @@ import Foundation
 struct AnalyticsCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "analytics",
-        abstract: "Show or change what amanu reports about how it is used."
+        abstract: "Show or change what jottie reports about how it is used."
     )
 
     @Argument(help: "`on` or `off`. Omit to print the current state.")
@@ -58,7 +58,7 @@ struct AnalyticsCommand: ParsableCommand {
         if on {
             print("")
             print("To be forgotten there, quote the identifier above.")
-            print("To forget it here:  rm ~/.config/amanu/analytics*.json")
+            print("To forget it here:  rm ~/.config/jottie/analytics*.json")
         }
     }
 }

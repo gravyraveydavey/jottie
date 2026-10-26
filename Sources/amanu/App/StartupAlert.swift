@@ -1,15 +1,15 @@
 import Foundation
 
-/// What the alert says when a check refuses to let amanu start.
+/// What the alert says when a check refuses to let jottie start.
 ///
-/// The checks are `amanu doctor`'s, whose report stays English like every
+/// The checks are `jottie doctor`'s, whose report stays English like every
 /// command's output; the alert is a window, and it used to be the one window
-/// in amanu that was English whatever the Mac spoke. A check that can refuse
+/// in jottie that was English whatever the Mac spoke. A check that can refuse
 /// a start carries its failure in the window's language as `explained`, and
 /// the report's own words are only the fallback for one that does not.
 enum StartupAlert {
     static var title: String {
-        localised("Amanu could not start", "Amanu не удалось запуститься")
+        localised("Jottie could not start", "Jottie не удалось запуститься")
     }
 
     static func body(for checks: [Check]) -> String {

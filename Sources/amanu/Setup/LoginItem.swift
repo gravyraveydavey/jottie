@@ -4,7 +4,7 @@ import ServiceManagement
 /// Start at login, for the application bundle.
 ///
 /// A signed bundle is its own responsible process for system audio — the
-/// spike in `spike/tcc-bundle` measured it — so amanu registers itself the way
+/// spike in `spike/tcc-bundle` measured it — so jottie registers itself the way
 /// every other application does, and appears in Login Items where someone
 /// would look for it.
 enum LoginItem {

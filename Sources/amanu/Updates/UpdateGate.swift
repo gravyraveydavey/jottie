@@ -5,7 +5,7 @@ import Foundation
 /// Sparkle's scheduler knows about days and versions; it does not know that
 /// this particular program is holding two audio taps open and that quitting to
 /// swap the binary would destroy the meeting someone is in. That is the whole
-/// reason this type exists: the rule is amanu's, so it lives in amanu, where
+/// reason this type exists: the rule is jottie's, so it lives in jottie, where
 /// it can be tested without a bundle, a framework, or a network.
 ///
 /// `AppUpdates` is the thin adapter that asks these questions on Sparkle's

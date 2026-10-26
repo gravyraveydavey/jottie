@@ -1,7 +1,7 @@
 import ArgumentParser
 import Foundation
 
-/// `amanu sessions` — what has been recorded and what is still owed on it.
+/// `jottie sessions` — what has been recorded and what is still owed on it.
 struct Sessions: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "sessions",
@@ -107,7 +107,7 @@ struct FormatTranscripts: ParsableCommand {
     }
 }
 
-/// `amanu process <folder>` — finish one session, wherever it lives now.
+/// `jottie process <folder>` — finish one session, wherever it lives now.
 ///
 /// Takes an arbitrary path rather than a session name on purpose. The folder
 /// in question may have been moved out of the recordings root entirely, and it
@@ -167,7 +167,7 @@ struct ProcessSession: ParsableCommand {
                 // The running app got to this folder first. Nothing has been
                 // touched, and there is nothing to fix — so this reads as a
                 // refusal rather than as a failure, and points at the copy of
-                // amanu that is doing the work.
+                // jottie that is doing the work.
                 print("")
                 print(busy)
                 throw ExitCode(1)

@@ -69,7 +69,7 @@ final class StubHTTP: @unchecked Sendable {
 }
 
 private final class StubProtocol: URLProtocol, @unchecked Sendable {
-    static let header = "X-Amanu-Stub"
+    static let header = "X-Jottie-Stub"
     private static let stubs = OSAllocatedUnfairLock(initialState: [String: Weak]())
 
     struct Weak { weak var stub: StubHTTP? }

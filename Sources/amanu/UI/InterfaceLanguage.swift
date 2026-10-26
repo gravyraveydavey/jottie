@@ -1,10 +1,10 @@
 import Foundation
 
-/// What language amanu's own windows are in, and how that is decided.
+/// What language jottie's own windows are in, and how that is decided.
 ///
 /// This is not `transcription.language` — the language meetings are held in —
 /// and not `summary.language` — the language summaries are written in. Those
-/// two are about other people's words; this one is about amanu's. The three
+/// two are about other people's words; this one is about jottie's. The three
 /// live far apart in the config file and are named apart in the windows for
 /// that reason, because they are three separate questions and the only thing
 /// they share is the word "language".
@@ -12,9 +12,9 @@ import Foundation
 /// The Mac's own languages decide it, and the config file can overrule them.
 /// Both halves earn their place. Somebody whose Mac is in Russian should not
 /// have to find a setting written in English to be spoken to in Russian; and
-/// somebody who keeps their Mac in one language and wants amanu in another has
+/// somebody who keeps their Mac in one language and wants jottie in another has
 /// nowhere else to say so — the per-app override in Language & Region only
-/// works for a bundle carrying `.lproj` resources, and amanu's strings are in
+/// works for a bundle carrying `.lproj` resources, and jottie's strings are in
 /// its code rather than in a resource nobody could read at `swift test` time.
 ///
 /// There is a history here worth not repeating. The setup window used to put
@@ -29,7 +29,7 @@ enum InterfaceLanguage: String, CaseIterable, Sendable {
 
     /// What the config file may say. `auto` is the default and means "ask the
     /// Mac"; the rest are the languages above, by the same two-letter code the
-    /// rest of amanu uses.
+    /// rest of jottie uses.
     static let automatic = "auto"
     static var configuredValues: [String] { [automatic] + allCases.map(\.rawValue) }
 
@@ -79,7 +79,7 @@ enum InterfaceLanguage: String, CaseIterable, Sendable {
     ///
     /// `preferred` is `Locale.preferredLanguages`: identifiers like `en-GB` or
     /// `ru-RU`, with the Mac's interface language first. Only that first answer
-    /// decides. Amanu speaks Russian on a Russian Mac and English everywhere
+    /// decides. Jottie speaks Russian on a Russian Mac and English everywhere
     /// else; walking farther down the list can put a Polish Mac into Russian
     /// merely because Russian is one of its owner's secondary languages.
     static func choose(configured: String?, preferred: [String]) -> InterfaceLanguage {
@@ -121,7 +121,7 @@ enum InterfaceLanguage: String, CaseIterable, Sendable {
     }
 }
 
-/// One thing amanu says, in both languages it can say it in.
+/// One thing jottie says, in both languages it can say it in.
 ///
 /// The pair sits where the words are used rather than in a table of keys
 /// somewhere else. A key table means every window is written in identifiers
@@ -132,7 +132,7 @@ enum InterfaceLanguage: String, CaseIterable, Sendable {
 /// the form rather than by reading two files at once.
 ///
 /// Not everything goes through this. Names of things stay as they are —
-/// AssemblyAI, OpenAI, Ollama, parakeet, amanu — and so do prices, paths and
+/// AssemblyAI, OpenAI, Ollama, parakeet, jottie — and so do prices, paths and
 /// version numbers: translating a name is how a window ends up naming
 /// something that does not exist.
 func localised(_ english: String, _ russian: String) -> String {

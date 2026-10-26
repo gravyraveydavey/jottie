@@ -27,7 +27,7 @@ struct GigaAMModelStore: Sendable {
 
     init(
         directory: URL = Home.current.url
-            .appendingPathComponent("Library/Application Support/amanu/models/gigaam", isDirectory: true),
+            .appendingPathComponent("Library/Application Support/jottie/models/gigaam", isDirectory: true),
         manifest: Manifest = GigaAMModelStore.defaultManifest,
         downloader: @escaping Downloader = { try await ModelDownloader.download(source: $0, partial: $1, progress: $2) }
     ) {

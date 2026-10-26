@@ -46,6 +46,6 @@ enum SessionLog {
     /// stderr through the C library rather than `FileHandle.standardError`,
     /// whose `write` is the same legacy call and raises on a closed pipe.
     static func complain(_ message: String) {
-        fputs("amanu: \(message)\n", stderr)
+        fputs("jottie: \(message)\n", stderr)
     }
 }

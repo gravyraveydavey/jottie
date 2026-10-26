@@ -1,7 +1,7 @@
 import Foundation
 
 extension Config {
-    /// Every key amanu reads from the config file, and the only way to read
+    /// Every key jottie reads from the config file, and the only way to read
     /// one.
     ///
     /// The settings used to be described twice: `Config` read them with a
@@ -15,7 +15,7 @@ extension Config {
     /// list and the schema's to be the same set; and the defaults of switches,
     /// numbers, choices and plain values come from the schema rather than
     /// being written a second time — so the placeholder the window shows is
-    /// the value amanu uses, by construction.
+    /// the value jottie uses, by construction.
     enum Key: String, CaseIterable, Sendable {
         case recordingsDir = "recordings_dir"
         case onStop = "on_stop"

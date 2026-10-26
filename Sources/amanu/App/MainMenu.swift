@@ -12,7 +12,7 @@ extension Run {
         let appMenu = NSMenu()
         // First in the menu, where every Mac puts it.
         let about = NSMenuItem(
-            title: localised("About Amanu", "О программе amanu"),
+            title: localised("About Jottie", "О программе jottie"),
             action: #selector(AppDelegate.showAboutClicked(_:)),
             keyEquivalent: ""
         )
@@ -56,7 +56,7 @@ extension Run {
         // stops to ask when a meeting is being recorded — and so
         // applicationWillTerminate closes a live recording properly rather
         // than truncating it.
-        appMenu.addItem(withTitle: localised("Quit Amanu", "Завершить amanu"),
+        appMenu.addItem(withTitle: localised("Quit Jottie", "Завершить jottie"),
                         action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
         main.addItem(appItem)

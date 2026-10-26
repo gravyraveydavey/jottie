@@ -11,7 +11,7 @@ protocol EchoCancellationBackend: AnyObject {
 enum LocalVQEAssets {
     static let modelName = "localvqe-v1.4-aec-200K-f32.gguf"
     static let modelSHA256 = "b6e43138588a83bfe903ab5e143b4020b91c1e1629f5a575ac5855ff0003c731"
-    static let processorVersion = "localvqe-v1.4-aec-200k-f32-amanu-v3"
+    static let processorVersion = "localvqe-v1.4-aec-200k-f32-jottie-v3"
 
     struct URLs {
         let library: URL
@@ -20,7 +20,7 @@ enum LocalVQEAssets {
 
     static var areAvailable: Bool { (try? resolve()) != nil }
 
-    /// A bundled CLI may have been reached through ~/.local/bin/amanu, so the
+    /// A bundled CLI may have been reached through ~/.local/bin/jottie, so the
     /// app path comes from Runtime.appBundle rather than Bundle.main.
     static func resolve() throws -> URLs {
         let urls: URLs
@@ -34,7 +34,7 @@ enum LocalVQEAssets {
         } else {
             let repository = URL(fileURLWithPath: #filePath)
                 .deletingLastPathComponent() // Audio
-                .deletingLastPathComponent() // amanu
+                .deletingLastPathComponent() // jottie
                 .deletingLastPathComponent() // Sources
                 .deletingLastPathComponent() // repository
             let root = repository.appendingPathComponent(".build/localvqe")

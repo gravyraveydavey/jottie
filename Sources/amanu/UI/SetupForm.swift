@@ -3,7 +3,7 @@ import FluidAudio
 import Foundation
 
 /// Everything a new installation is asked: the permissions macOS will
-/// otherwise demand at the worst possible moment, and the choices amanu can't
+/// otherwise demand at the worst possible moment, and the choices jottie can't
 /// sensibly make for you — what writes the transcript, what writes the
 /// summary, where the files go, and whether it all runs by itself.
 ///
@@ -11,7 +11,7 @@ import Foundation
 /// setup window wraps it in a wizard — a footer that names what is left and a
 /// button that does the next thing — and the settings window shows the same
 /// form as its first tab. One form, so the two can never drift into
-/// disagreeing about what amanu offers; and there is nothing in setup a
+/// disagreeing about what jottie offers; and there is nothing in setup a
 /// person should have to reopen setup to change.
 ///
 /// It is AppKit rather than a terminal wizard for a reason that isn't
@@ -30,6 +30,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     /// system audio both disturb a running recording, and nothing in this
     /// form is worth losing a meeting for.
     var isRecording: (() -> Bool)?
+    var onShowAnalysisSettings: (() -> Void)?
     /// Called whenever anything a host displays *about* the form may have
     /// changed — what is still outstanding, what the next action is. The
     /// setup window's footer is written from it, and the settings window
@@ -91,7 +92,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     /// window showing the same form, the Advanced tab beside it, or the
     /// status window's live-transcript switch.
     private var configWatch: ConfigWatch.Token?
-    /// Redraws this copy when amanu comes back to the front. Every grant the
+    /// Redraws this copy when jottie comes back to the front. Every grant the
     /// Access rows ask for is given somewhere else — System Settings, a
     /// Login Items switch — and the person comes back from there to a window
     /// that went on saying the microphone was denied until something else
@@ -101,8 +102,8 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     private let launchRow = AccessRow(
         title: localised("Start at login", "Запуск при входе"),
         detail: localised(
-            "So a meeting is never missed because nobody opened amanu.",
-            "Чтобы встреча не пропала из-за того, что amanu никто не открыл."),
+            "So a meeting is never missed because nobody opened jottie.",
+            "Чтобы встреча не пропала из-за того, что jottie никто не открыл."),
         action: localised("Install", "Включить"),
         grantedNote: localised("installed", "включено"))
     private let micRow = AccessRow(
@@ -273,15 +274,22 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
 
         form.addArrangedSubview(SetupLayout.section(
             localised("Files", "Файлы"),
-            content: SetupLayout.box([folderRow(), keepAudioRow()])))
+            content: SetupLayout.box(Home.runsInsideTests ? [folderRow(), keepAudioRow()] : [folderRow()])))
 
+        if Home.runsInsideTests {
         form.addArrangedSubview(SetupLayout.section(
             localised("Summaries", "Саммари"),
             leading: summariesOn,
             content: summaryChoices()))
+        } else {
+            let explanation = NSTextField(wrappingLabelWithString: "Codex summaries, tags and automatic filing are configured in Jottie Settings.")
+            let button = NSButton(title: "Codex summary settings…", target: self, action: #selector(showAnalysisSettings))
+            button.bezelStyle = .rounded
+            form.addArrangedSubview(SetupLayout.section("Summaries", content: SetupLayout.box([explanation, button])))
+        }
 
         form.addArrangedSubview(SetupLayout.section(
-            localised("Where amanu shows up", "Где видно amanu"),
+            localised("Where jottie shows up", "Где видно jottie"),
             content: SetupLayout.group(
                 [SetupLayout.box([menuBarIconRow(), dockIconRow()]), noIconsNote],
                 spacing: SetupLayout.headerGap)))
@@ -293,7 +301,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
 
         // Last in the form so the default-on reporting choice is visible on
         // first setup and remains easy to change when setup is reopened.
-        form.addArrangedSubview(SetupLayout.box([analyticsRow()]))
+        if Home.runsInsideTests { form.addArrangedSubview(SetupLayout.box([analyticsRow()])) }
 
         for view in form.arrangedSubviews {
             view.widthAnchor.constraint(
@@ -463,7 +471,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
 
         // One row, not two, on an Intel Mac: there is no local model to offer,
         // and the row explains itself rather than vanishing.
-        return SetupLayout.box([cloudRow, providerRow(), localBlock])
+        return SetupLayout.box(Home.runsInsideTests ? [cloudRow, providerRow(), localBlock] : [localBlock])
     }
 
     /// The provider cards and the one key field they share, indented under
@@ -563,7 +571,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         return stack
     }
 
-    /// Detect first, then the five languages amanu is actually used in, then
+    /// Detect first, then the five languages jottie is actually used in, then
     /// the alphabet. Each item carries its own config value, so the menu can
     /// be reordered without a table of indices to keep in step with it.
     private func buildLanguageMenu() {
@@ -775,7 +783,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             spacing: SetupLayout.cardGap)
     }
 
-    /// The two places a person can find a running amanu, each of which can be
+    /// The two places a person can find a running jottie, each of which can be
     /// given up. Both, if they like: what is left then is the program itself,
     /// which is opened the way any program is opened, and `noIconsNote` says
     /// so at the moment it becomes true.
@@ -838,7 +846,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
                 lines: 2, width: 520),
             trailing: [link(
                 localised("What exactly", "Что именно"),
-                "https://github.com/gsamat/amanu/blob/master/docs/analytics.md")])
+                "https://github.com/gravyraveydavey/jottie/blob/master/docs/analytics.md")])
     }
 
     private func link(_ title: String, _ url: String) -> NSButton {
@@ -847,15 +855,15 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
 
     /// What is left when neither icon is on, and nothing at all while either
     /// is. Static and free of AppKit so the sentence can be checked without a
-    /// window: it is the only instruction amanu gives for reaching itself,
+    /// window: it is the only instruction jottie gives for reaching itself,
     /// and it is shown exactly when it is the only way in.
     nonisolated static func noIconsNote(menuBar: Bool, dock: Bool) -> String {
         guard !menuBar, !dock else { return "" }
         return localised(
-            "amanu keeps recording with no icon anywhere. To bring the window back, open Amanu "
+            "jottie keeps recording with no icon anywhere. To bring the window back, open Jottie "
                 + "again — from Spotlight, or from Applications.",
-            "amanu продолжит записывать, но её нигде не будет видно. Чтобы вернуть окно, "
-                + "откройте Amanu ещё раз — из Spotlight или из папки «Программы».")
+            "jottie продолжит записывать, но её нигде не будет видно. Чтобы вернуть окно, "
+                + "откройте Jottie ещё раз — из Spotlight или из папки «Программы».")
     }
 
     /// "18 Aug" — enough to tell this week from last spring, and short enough
@@ -1502,7 +1510,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         let key = cloudKey.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return }
         let slot = Credentials.transcriptionSlot(for: target, in: Config.raw())
-        guard slot.isAmanus else {
+        guard slot.isJotties else {
             cloudKeyStatus.stringValue = Credentials.notOursToWrite(slot)
             return
         }
@@ -1547,7 +1555,7 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
         let backend = selectedKeyBackend
         let config = Config.raw()
         let slot = Credentials.summarySlot(for: backend, in: config)
-        guard slot.isAmanus else {
+        guard slot.isJotties else {
             summaryKeyStatus.stringValue = Credentials.notOursToWrite(slot)
             return
         }
@@ -1667,7 +1675,10 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
     /// Summaries are on and the thing chosen to write them is not on this
     /// Mac. The card says "not here" in orange; this is what puts it in the
     /// one line somebody reads before pressing Done.
+    @objc private func showAnalysisSettings() { onShowAnalysisSettings?() }
+
     private var chosenSummaryIsMissing: Bool {
+        guard Home.runsInsideTests else { return false }
         let summary = Config.summary()
         guard summary.enabled else { return false }
         switch SetupSelection.summaryChoice(backend: summary.backend) {
@@ -1707,8 +1718,8 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             launchRow.update(
                 .notAsked,
                 detail: localised(
-                    "Only Amanu.app can register itself; this is a bare build.",
-                    "Зарегистрировать себя может только Amanu.app, а это голая сборка."))
+                    "Only Jottie.app can register itself; this is a bare build.",
+                    "Зарегистрировать себя может только Jottie.app, а это голая сборка."))
         }
         micRow.update(SetupPermissions.microphone())
         calendarRow.update(calendarGrant ?? SetupPermissions.calendar())

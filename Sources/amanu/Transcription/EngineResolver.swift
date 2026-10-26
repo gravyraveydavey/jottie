@@ -54,11 +54,15 @@ actor EngineResolver {
     /// The engine this session asks for, prepared.
     func engine(for session: URL) async throws -> TranscriptionEngine {
         if let fixedEngine { return try await hold(fixedEngine.name, fixedEngine) }
-        let configured = Self.configuredEngine(for: session)
+        let configured = Home.runsInsideTests ? Self.configuredEngine(for: session) : Config.transcriptionLocalEngine()
         if !Self.knownEngines.contains(configured) {
             FileHandle.standardError.write(Data(
                 "warning: unknown transcription engine \"\(configured)\" — choosing automatically\n".utf8
             ))
+        }
+        if !Home.runsInsideTests {
+            guard environment.localModels() else { throw EngineUnavailable.noLocalModels }
+            return try await self.local(configured)
         }
         let provider = Self.cloudProvider(configured: configured)
         let hasKey = environment.hasKey(provider)

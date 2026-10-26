@@ -1,6 +1,6 @@
 import Foundation
 
-/// Every setting a running amanu can take up without starting again, taken
+/// Every setting a running jottie can take up without starting again, taken
 /// up the moment the config file says so.
 ///
 /// Before this, each surface that wrote such a setting also did whatever

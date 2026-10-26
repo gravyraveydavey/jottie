@@ -134,7 +134,7 @@ struct CloudHTTP: Sendable {
             case .unavailable(let service, let what, let status, let body):
                 return "\(service) \(what) failed: HTTP \(status) \(body.prefix(400))"
             case .malformed(let service, let what, let body):
-                return "\(service) \(what) returned a body amanu can't read: \(body.prefix(400))"
+                return "\(service) \(what) returned a body jottie can't read: \(body.prefix(400))"
             }
         }
     }
@@ -330,9 +330,9 @@ struct CloudHTTP: Sendable {
         what: String,
         timeout: TimeInterval
     ) async throws -> Data {
-        let boundary = "amanu.\(UUID().uuidString)"
+        let boundary = "jottie.\(UUID().uuidString)"
         let body = FileManager.default.temporaryDirectory
-            .appendingPathComponent("amanu-\(service.rawValue)-\(UUID().uuidString).multipart")
+            .appendingPathComponent("jottie-\(service.rawValue)-\(UUID().uuidString).multipart")
         try Self.writeMultipart(fields: fields, file: file, boundary: boundary, to: body)
         defer { try? FileManager.default.removeItem(at: body) }
 

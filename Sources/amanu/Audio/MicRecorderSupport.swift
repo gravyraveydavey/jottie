@@ -185,7 +185,7 @@ final class TrackWriter: @unchecked Sendable {
     init(file: AVAudioFile, label: String) {
         self.file = file
         self.label = label
-        queue = DispatchQueue(label: "me.samat.amanu.\(label)-writer")
+        queue = DispatchQueue(label: "com.gravyraveydavey.jottie.\(label)-writer")
     }
 
     /// Write `buffer`, preceded by `silence` frames of zeros. Called from the

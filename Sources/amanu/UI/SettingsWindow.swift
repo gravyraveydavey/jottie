@@ -40,6 +40,9 @@ import AppKit
 /// still has to say what it does.
 @MainActor
 final class SettingsWindow: NSObject, NSTextFieldDelegate {
+    var onShowAnalysisSettings: (() -> Void)? {
+        didSet { setup.onShowAnalysisSettings = onShowAnalysisSettings }
+    }
     /// Forwarded to the setup form, which will not disturb a running
     /// recording to register a login item or play a test tone.
     var isRecording: (() -> Bool)? {
@@ -90,7 +93,7 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         )
         super.init()
 
-        panel.title = localised("amanu settings", "Настройки amanu")
+        panel.title = localised("jottie settings", "Настройки jottie")
         panel.level = .normal
         panel.hidesOnDeactivate = false
         // Closing hides; the menu reopens it. Same reasoning as the status
@@ -165,7 +168,7 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         setup.showsConfigProblems = false
         showOutstanding()
 
-        panel.setFrameAutosaveName("amanu.settings")
+        panel.setFrameAutosaveName("jottie.settings")
         if panel.frame.origin == .zero { panel.center() }
         refresh()
     }
@@ -283,9 +286,11 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         form.edgeInsets = NSEdgeInsets(top: 18, left: 20, bottom: 18, right: 20)
 
         for (index, section) in SettingsSchema.advancedSections.enumerated() {
+            let entries = section.entries.filter { Home.runsInsideTests || !["summary", "speaker_names"].contains($0.path.first ?? "") }
+            guard !entries.isEmpty else { continue }
             if index > 0 { form.setCustomSpacing(24, after: form.arrangedSubviews.last!) }
             form.addArrangedSubview(sectionHeader(section.title))
-            for entry in section.entries {
+            for entry in entries {
                 form.addArrangedSubview(makeRow(for: entry))
             }
         }
@@ -299,7 +304,7 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
         return form
     }
 
-    /// What the local models are costing in disk, and the only place amanu
+    /// What the local models are costing in disk, and the only place jottie
     /// offers to remove them.
     ///
     /// It breaks this tab's one rule — everything here comes from
@@ -721,8 +726,8 @@ final class SettingsWindow: NSObject, NSTextFieldDelegate {
 
         if entry.needsRestart {
             restartNotice.stringValue = localised(
-                "“\(entry.label)” applies the next time amanu starts.",
-                "«\(entry.label)» подействует при следующем запуске amanu.")
+                "“\(entry.label)” applies the next time jottie starts.",
+                "«\(entry.label)» подействует при следующем запуске jottie.")
             restartNotice.isHidden = false
         }
         // Clearing can change what a field should show — an emptied field goes

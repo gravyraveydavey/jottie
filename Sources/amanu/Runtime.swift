@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
 
-/// How this copy of amanu is running: as `Amanu.app`, or as the bare binary
+/// How this copy of jottie is running: as `Jottie.app`, or as the bare binary
 /// it used to be.
 ///
 /// The difference decides real behaviour, not cosmetics. A bundle can register
@@ -17,7 +17,7 @@ enum Runtime {
     static var appBundle: Bundle? {
         if Bundle.main.bundleURL.pathExtension == "app" { return Bundle.main }
 
-        // `~/.local/bin/amanu` is a symlink into the bundle, and Foundation
+        // `~/.local/bin/jottie` is a symlink into the bundle, and Foundation
         // answers for the path it was invoked through — which is a plain
         // directory. Follow the link before deciding: the CLI running out of
         // the bundle is the same program as the app, and registering a login
@@ -28,7 +28,7 @@ enum Runtime {
         let bundleURL = executable
             .deletingLastPathComponent()  // MacOS
             .deletingLastPathComponent()  // Contents
-            .deletingLastPathComponent()  // Amanu.app
+            .deletingLastPathComponent()  // Jottie.app
         guard bundleURL.pathExtension == "app" else { return nil }
         return Bundle(url: bundleURL)
     }

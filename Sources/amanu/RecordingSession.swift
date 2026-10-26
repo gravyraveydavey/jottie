@@ -8,7 +8,7 @@ struct RecordingInProgress: Sendable {
     let dir: URL
     let pid: Int32
     /// Nil only when the manifest was written by something that did not put a
-    /// readable `started` in it; every version of amanu does.
+    /// readable `started` in it; every version of jottie does.
     let started: Date?
     let ownerIsAlive: Bool
 }
@@ -368,7 +368,7 @@ final class RecordingSession {
     ///
     /// This is the only answer on disk to "is something being recorded right
     /// now". `meta.json` is written when a recording stops, so anything that
-    /// reads it — `amanu sessions`, the transcription queue — can only ever
+    /// reads it — `jottie sessions`, the transcription queue — can only ever
     /// say no, which is the wrong answer in exactly the case that matters
     /// (.issues/005).
     nonisolated static func inProgress(root: URL) -> [RecordingInProgress] {
@@ -446,7 +446,7 @@ final class RecordingSession {
                 continue
             }
 
-            // A live owner means a second amanu is recording into this folder
+            // A live owner means a second jottie is recording into this folder
             // right now. Leave it strictly alone. (A recycled PID could fool
             // this; the cost is deferring recovery to the next launch, which
             // is the safe direction to be wrong in.) A manifest without a pid
@@ -463,7 +463,7 @@ final class RecordingSession {
             guard let largest = sizes.max(), largest > 0 else {
                 // Its owner is gone, so nothing will ever be written here.
                 // Leaving the manifest meant saying "has no audio" on every
-                // launch and `amanu doctor` warning about an unrecovered
+                // launch and `jottie doctor` warning about an unrecovered
                 // recording forever.
                 FileHandle.standardError.write(Data(
                     "interrupted session \(dir.lastPathComponent) has no audio — removing it\n".utf8
@@ -530,8 +530,8 @@ final class RecordingSession {
             ))
             notifyUser(
                 title: localised(
-                    "amanu — interrupted recording recovered",
-                    "amanu — прерванная запись восстановлена"),
+                    "jottie — interrupted recording recovered",
+                    "jottie — прерванная запись восстановлена"),
                 body: recovered.map { $0.lastPathComponent }.joined(separator: ", ")
             )
         }
@@ -664,8 +664,8 @@ final class RecordingSession {
         ))
         notifyUser(
             title: localised(
-                "amanu: couldn't save the recording's details",
-                "amanu: не удалось сохранить сведения о записи"),
+                "jottie: couldn't save the recording's details",
+                "jottie: не удалось сохранить сведения о записи"),
             body: localised(
                 "The audio is kept and will be picked up again at the next launch. Is the disk full?",
                 "Звук сохранён и будет подхвачен при следующем запуске. Не заполнен ли диск?"),
@@ -696,8 +696,8 @@ final class RecordingSession {
                 if trackStalled.remove(name) != nil {
                     notifyUser(
                         title: localised(
-                            "amanu: \(name) track recovered",
-                            "amanu: дорожка \(name) снова пишется"),
+                            "jottie: \(name) track recovered",
+                            "jottie: дорожка \(name) снова пишется"),
                         body: localised(
                             "\(name) audio is being written again.",
                             "Звук \(name) снова записывается."),
@@ -718,7 +718,7 @@ final class RecordingSession {
             let silentFor = Int(now.timeIntervalSince(last))
             notifyUser(
                 title: localised(
-                    "amanu: \(name) track stalled", "amanu: дорожка \(name) встала"),
+                    "jottie: \(name) track stalled", "jottie: дорожка \(name) встала"),
                 body: size == nil
                     ? localised(
                         "There is no \(name) track being written — the recording may be incomplete.",
@@ -796,7 +796,7 @@ final class RecordingSession {
         }
         notifyUser(
             title: localised(
-                "amanu: nothing from the far end", "amanu: от дальней стороны ничего нет"),
+                "jottie: nothing from the far end", "jottie: от дальней стороны ничего нет"),
             body: localised(detail.0, detail.1)
         )
     }

@@ -1,12 +1,12 @@
 import AppKit
 
 /// Dock behaviour. Clicking the icon of a running app sends a reopen, which is
-/// how the window comes back after you close it; and amanu must not quit just
+/// how the window comes back after you close it; and jottie must not quit just
 /// because its only window was closed — it's a recorder, the window is a view
 /// onto it.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Called on a Dock click, with `alreadyActive` false when that click was
-    /// the one that brought amanu forward.
+    /// the one that brought jottie forward.
     var onReopen: ((_ alreadyActive: Bool) -> Void)?
     var onTerminate: (() -> Void)?
     /// Gives asynchronous filesystem work a chance to cancel and remove its
@@ -34,7 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Clicking the Dock icon of an app that's already in front should put the
     /// window away again — show, hide, show. The catch is that AppKit
     /// activates the app *before* asking us, so `NSApp.isActive` is true
-    /// either way; the only thing that separates "already working in amanu"
+    /// either way; the only thing that separates "already working in jottie"
     /// from "just switched to it" is how long ago activation happened.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         let justActivated = Date().timeIntervalSince(becameActiveAt) < 0.3
@@ -64,12 +64,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 """
                 Quitting stops the recording and saves it — nothing recorded so far is lost, \
                 and it will be transcribed like any other session. But nothing is recorded \
-                after this until amanu runs again.
+                after this until jottie runs again.
                 """,
                 """
                 При выходе запись остановится и сохранится — записанное не пропадёт \
                 и будет расшифровано, как любая другая сессия. Но дальше, до следующего \
-                запуска amanu, ничего записываться не будет.
+                запуска jottie, ничего записываться не будет.
                 """)
             alert.addButton(withTitle: localised(
                 "Quit and save the recording", "Выйти и сохранить запись"))
@@ -91,7 +91,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// The app menu's **Setup…**, kept so that it can be taken away once the
-    /// first run is over and put back when `amanu setup` asks for it again.
+    /// first run is over and put back when `jottie setup` asks for it again.
     var setupItem: NSMenuItem?
 
     func setupAvailable(_ available: Bool) {

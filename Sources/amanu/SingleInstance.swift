@@ -10,8 +10,8 @@ import Foundation
 /// double-clicking it in /Applications — so the second copy asks the first to
 /// come forward and then gets out of the way.
 enum SingleInstance {
-    private static let ping = Notification.Name("me.samat.amanu.activate")
-    private static let pong = Notification.Name("me.samat.amanu.activate-ack")
+    private static let ping = Notification.Name("com.gravyraveydavey.jottie.activate")
+    private static let pong = Notification.Name("com.gravyraveydavey.jottie.activate-ack")
 
     @MainActor
     private final class Reply {

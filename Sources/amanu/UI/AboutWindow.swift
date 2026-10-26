@@ -1,12 +1,12 @@
 import AppKit
 
-/// The small window behind **About amanu**: whose program this is, where its
+/// The small window behind **About jottie**: whose program this is, where its
 /// source is, and how to ask for one like it.
 ///
 /// Every Mac application has this window and it is always in the same place,
 /// which is the whole reason for it — somebody wondering who wrote a thing
 /// that has been recording their meetings for a month looks under About
-/// before anywhere else. amanu had nowhere to answer: it runs as
+/// before anywhere else. jottie had nowhere to answer: it runs as
 /// `.accessory`, so its application menu is only on screen while one of its
 /// windows is in front, and neither the status window nor Settings is a place
 /// for a name.
@@ -30,7 +30,7 @@ final class AboutWindow: NSObject {
         )
         super.init()
 
-        panel.title = localised("About amanu", "О программе amanu")
+        panel.title = localised("About jottie", "О программе jottie")
         panel.isReleasedWhenClosed = false
 
         let icon = NSImageView()
@@ -39,7 +39,7 @@ final class AboutWindow: NSObject {
         // having to know which it is.
         icon.image = FeatherIcon.image(size: 72, color: nil)
 
-        let name = NSTextField(labelWithString: "amanu")
+        let name = NSTextField(labelWithString: "jottie")
         name.font = .systemFont(ofSize: 22, weight: .semibold)
 
         let version = NSTextField(labelWithString: Self.versionLine ?? "")
@@ -124,9 +124,9 @@ final class AboutWindow: NSObject {
     private static let width: CGFloat = 340
 
     static let authorPage = "https://samat.me"
-    static let sourceRepository = "https://github.com/gsamat/amanu"
+    static let sourceRepository = "https://github.com/gravyraveydavey/jottie"
 
-    /// The studio's site exists in each of amanu's two languages, and the one
+    /// The studio's site exists in each of jottie's two languages, and the one
     /// to open is the one the person reading this window can read. Which is
     /// why an address goes through `localised` here, where addresses usually
     /// stay as they are: these two are one page written twice, not a name.

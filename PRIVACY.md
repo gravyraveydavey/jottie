@@ -1,66 +1,27 @@
-# Privacy
+# Jottie privacy and data flow
 
-Amanu has no account and no hosted meeting library. Recordings and the files
-made from them live in the recordings folder on your computer. What leaves the
-computer depends on the transcription, speaker-naming, and summary backends you
-choose.
+Recording and transcription run on this Mac. Jottie uses local Parakeet, Whisper or GigaAM, with no cloud-audio fallback. Audio is temporary: it is deleted after a durable successful transcript. Interrupted or failed transcription keeps audio locally so it can be recovered or retried. Recoverable text, prior analysis and trashed records remain under the Jottie data directory until you remove them.
 
-## Meeting content
+## Optional Codex analysis
 
-- Recording is local. Microphone audio, system audio, and optional live
-  transcription are captured and stored on your computer.
-- Parakeet, Whisper, and GigaAM transcription run locally. The optional live
-  transcript uses a separate local streaming model on both platforms. Ollama
-  summaries run locally when its Base URL is localhost/loopback; another host
-  receives the summary input.
-- If you enable AssemblyAI, OpenAI, or ElevenLabs transcription, Amanu uploads
-  the meeting audio to that provider.
-- If you select Claude Code, Codex, Anthropic, or OpenAI for summaries or
-  speaker naming, Amanu gives that backend the transcript and the available
-  meeting context: title, call application, and, on macOS, calendar participants.
-  Those CLI tools or APIs may send the material to their provider under the
-  terms of the account you use.
-- Speaker naming goes wherever summaries go. With summaries turned off it asks
-  no model at all and fills in only your own name, unless
-  `speaker_names.backend` names a backend for it.
-- API keys stay on your computer and are sent only to the provider they
-  authenticate. macOS Settings stores keys under `~/.config/amanu/keys/`;
-  Windows uses Windows Credential Manager (`Amanu/…`).
+Enable analysis explicitly in Library Settings. Jottie gives your signed-in Codex CLI the full transcript, selected meeting/calendar context and folder labels. Codex sends this text to OpenAI using your ChatGPT account; its terms, policies and usage allowance apply. This is local transcription with optional remote text analysis, not a promise of fully offline AI. There is no metered API or alternate-provider fallback.
 
-Calendar access is optional on macOS; Windows has no calendar integration. Amanu
-reads events to identify a meeting, name its recording, and optionally start it
-at the scheduled time. Calendar context stays local unless it is included in a
-request to a cloud or CLI model as described above.
+The subprocess uses ephemeral sessions, an isolated temporary directory, structured output and disabled tools/integrations. Temporary input, response and trace files are removed after the request completes. Jottie does not log raw transcript text to its processing ledger.
 
-## Product analytics
+## Calendars and speakers
 
-Product-usage reporting is enabled by default and can be disabled in first-run
-setup or Settings on both platforms, or with `amanu analytics off` on macOS. It
-sends a small closed set of events with a random installation identifier to
-`stats.amanu.me`. It never includes recordings, transcripts, summaries, calendar
-contents, names, paths, keys, or error text. The complete event and field list,
-retention period, and deletion instructions are in [What Amanu sends](docs/analytics.md).
+Calendar access is optional. Only selected calendars supply meeting titles and invitees. Calendar-triggered recording is an independent preference. An invitation is not proof that someone attended or spoke. AI speaker candidates remain unconfirmed until a user accepts a correction; original transcript text and labels are retained.
 
-## Updates and model downloads
+## Optional SharePoint publication
 
-On macOS, Sparkle checks `amanu.me/appcast.xml` for updates and downloads a
-selected release from GitHub. Installed Windows copies check the separate stable
-Velopack feed on GitHub; portable copies do not update themselves. Local model
-setup downloads model files from their hosting services, including Hugging Face.
-These requests expose ordinary network metadata such as the IP address and user
-agent to the destination; they do not include meeting content. The
-product-analytics switch controls usage reporting separately from updates and
-model downloads.
+Publishing requires Microsoft sign-in and an explicit destination for selected folder subtrees. It sends transcript, analysis and eligible folder-context text/Markdown/JSON to Microsoft Graph. Audio and capture logs are excluded. Tokens are managed by MSAL in Jottie's private Keychain cache. Local settings store destination/account identifiers, not access tokens.
 
-## Website analytics
+Remote revisions are retained. Local deletion, moving a meeting or disabling publishing does not revoke access to copies already published. Permissions come from Microsoft and the chosen destination; AI classifications never grant access.
 
-The website sends a first-party request to `amanu.me/m` when a page is viewed,
-and another aggregate event if a release download link is clicked. A page view
-contains the page path and title, screen dimensions, and the referring page when
-the browser supplies one. The download event contains only the fixed name
-`download_clicked` and current page path. As with any web request, the server
-also receives ordinary request metadata such as the IP address and user agent.
-The site sets no analytics identifier, does not connect this activity to the app
-installation identifier, and loads no third-party analytics script.
+## Local MCP
 
-Questions or deletion requests can be sent to [s@samat.me](mailto:s@samat.me).
+The optional stdio MCP service exposes read-only meeting search, summaries, transcripts and folder context to the local client that launches it. It does not open a network listener. That client may send returned meeting text to its own model provider under the client's policies. Configure access only in clients you intend to use with this library.
+
+## Analytics, updates and downloads
+
+The Jottie pilot does not send upstream product analytics and does not use Amanu's update feed. Model downloads still contact their configured upstream distribution hosts. Codex and Microsoft authentication contact their providers when those features are used. No Jottie account or hosted meeting database is required.

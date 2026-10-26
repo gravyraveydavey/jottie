@@ -36,7 +36,7 @@ annoyed enough to write in.
 ## The identifier
 
 A random UUID, made on the first run, kept for good. It is in
-`~/.config/amanu/analytics.json` and `amanu analytics` prints it.
+`~/.config/jottie/analytics.json` and `amanu analytics` prints it.
 
 On the wire, each event is paired with Umami's `identify` message carrying the
 same UUID. That message adds no event or content of its own; it prevents two
@@ -49,7 +49,7 @@ short, why nothing on it names anything you recorded, and why the address is
 discarded rather than stored.
 
 To be forgotten on the server, quote your identifier and ask. To be forgotten
-locally, `rm ~/.config/amanu/analytics*.json` — the next run starts as a
+locally, `rm ~/.config/jottie/analytics*.json` — the next run starts as a
 stranger.
 
 The argument for all of this, including what was rejected, is in
@@ -156,7 +156,7 @@ diarization" get answered without an event of their own.
 
 Events buffer in memory and go every thirty seconds, on quitting, and at the
 next launch for whatever did not get through. What fails to send is held in
-`~/.config/amanu/analytics-pending.json` for at most seven days and at most
+`~/.config/jottie/analytics-pending.json` for at most seven days and at most
 five hundred events, then dropped. Turning analytics off deletes that file
 along with everything in it.
 

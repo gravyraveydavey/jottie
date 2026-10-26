@@ -580,7 +580,7 @@ struct SettingsDocumentationTests {
                 .deletingLastPathComponent()  // Tests
                 .deletingLastPathComponent()  // repository root
             return try String(
-                contentsOf: root.appendingPathComponent("README.md"), encoding: .utf8)
+                contentsOf: root.appendingPathComponent("docs/upstream-amanu.md"), encoding: .utf8)
         }
     }
 

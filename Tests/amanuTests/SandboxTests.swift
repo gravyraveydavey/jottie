@@ -4,7 +4,7 @@ import Testing
 
 @testable import amanu
 
-/// The suite used to read the developer's own `~/.config/amanu/config.json`,
+/// The suite used to read the developer's own `~/.config/jottie/config.json`,
 /// their key files, and — through `LLMBackend.available` — their `claude`
 /// CLI, Anthropic key and Ollama. Nothing did anything harmful with them only
 /// because the fixtures happened to say "already summarized". `Home` is what

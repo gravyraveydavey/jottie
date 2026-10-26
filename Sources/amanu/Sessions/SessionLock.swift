@@ -6,7 +6,7 @@ import Foundation
 ///
 /// Those files are amended by several hands: the transcription queue, the
 /// namer, the summarizer, a person renaming a speaker in the recordings
-/// window, and `amanu process` in a terminal beside the app. Each read the
+/// window, and `jottie process` in a terminal beside the app. Each read the
 /// file, changed its own keys and wrote the whole thing back, so whichever
 /// wrote second put back what the first had just removed or took away what
 /// it had just added — a name typed by hand while a naming run was waiting on

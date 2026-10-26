@@ -1,6 +1,6 @@
 import Foundation
 
-/// The keys amanu holds for other services: where each one lives, whether it
+/// The keys jottie holds for other services: where each one lives, whether it
 /// is there, and how to ask the service whether it still works.
 ///
 /// Kept out of the setup form because none of it is about a window. The form
@@ -23,18 +23,18 @@ enum Credentials {
     ///
     /// Written anywhere else, a key is a key nothing reads while the window
     /// says it works — which is what happened to a person whose config named
-    /// `summary.openai_api_key_path`: every key they pasted went to amanu's
+    /// `summary.openai_api_key_path`: every key they pasted went to jottie's
     /// own file, and every summary went on reading the other one.
     struct Slot: Equatable {
         let path: URL
-        /// The person named this file in the config rather than amanu
+        /// The person named this file in the config rather than jottie
         /// choosing it.
         let isNamedInConfig: Bool
 
-        /// Whether amanu may write here. Only its own drawer: a file the
+        /// Whether jottie may write here. Only its own drawer: a file the
         /// config names can be one several tools share, and `docs/pitfalls.md`
         /// says what writing to one of those cost once.
-        var isAmanus: Bool {
+        var isJotties: Bool {
             let drawer = Config.keysDir.standardizedFileURL.path + "/"
             return path.standardizedFileURL.path.hasPrefix(drawer)
         }
@@ -147,7 +147,7 @@ enum Credentials {
 
     /// A key is a secret: it goes to a file only its owner can read, never
     /// into the config file — which the settings window shows on screen. The
-    /// directory is amanu's own and mode 0700, so a key pasted here can't be
+    /// directory is jottie's own and mode 0700, so a key pasted here can't be
     /// overwritten by some other tool that keeps its secrets in the same place.
     static func writeSecret(_ value: String, to path: URL) throws {
         try FileManager.default.createDirectory(
@@ -159,7 +159,7 @@ enum Credentials {
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path.path)
     }
 
-    /// Why a key was not written to a file the config names: amanu writes
+    /// Why a key was not written to a file the config names: jottie writes
     /// only into its own drawer, so the person is told where to put it.
     static func notOursToWrite(_ slot: Slot) -> String {
         let shown = Home.current.abbreviating(slot.path.path)
@@ -276,7 +276,7 @@ enum Credentials {
         // Restricted keys can transcribe without permission to read /v1/user.
         // Submit no file to the STT endpoint: a permitted key gets validation
         // error 422, an invalid key gets 401, and nothing is transcribed.
-        let boundary = "amanu-key-check"
+        let boundary = "jottie-key-check"
         var request = URLRequest(url: URL(string: "https://api.elevenlabs.io/v1/speech-to-text")!)
         request.httpMethod = "POST"
         request.timeoutInterval = 15

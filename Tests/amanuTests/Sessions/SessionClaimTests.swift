@@ -57,7 +57,7 @@ struct SessionClaimTests {
             // The two parts of one process that both reach for a folder — the
             // post-processing sweep and the transcription queue — are refused
             // in words that do not tell anyone to quit the app they are in.
-            #expect(busy.description.contains("This copy of amanu"))
+            #expect(busy.description.contains("This copy of jottie"))
         }
         #expect(
             try Data(contentsOf: url) == before,

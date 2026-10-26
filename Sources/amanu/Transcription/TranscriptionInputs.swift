@@ -146,7 +146,7 @@ struct TranscriptionInputs {
             var temporary: URL?
             if let channel = track.channel {
                 let extracted = FileManager.default.temporaryDirectory
-                    .appendingPathComponent("amanu-\(UUID().uuidString)-channel-\(channel).m4a")
+                    .appendingPathComponent("jottie-\(UUID().uuidString)-channel-\(channel).m4a")
                 do {
                     try await Task.detached(priority: .utility) {
                         try AudioChannelExtractor.extract(

@@ -22,7 +22,7 @@ struct StartupAlertTests {
         let check = DoctorReport.checkRecordingsRoot(root)
         let body = StartupAlert.body(for: [check])
 
-        #expect(StartupAlert.title == "Amanu не удалось запуститься")
+        #expect(StartupAlert.title == "Jottie не удалось запуститься")
         #expect(body.contains("Не удаётся создать папку записей"))
         #expect(body.contains(root.path))
         #expect(!body.contains("can't create"), "the doctor's English leaked into the window")

@@ -1,7 +1,7 @@
 import AppKit
 
 /// Status bar item in the top-right of the menu bar. Shows recording state at
-/// a glance, and carries the menu that is amanu's fullest control surface.
+/// a glance, and carries the menu that is jottie's fullest control surface.
 ///
 /// The item can be taken away — `menu_bar_icon: false` — so it is held as an
 /// optional and the menu is kept apart from it. That way the menu outlives
@@ -112,7 +112,7 @@ final class MenuBarController {
         // The window is the reliable surface — this item is how you get it
         // back when the menu bar is where you happened to look first.
         let showWindow = NSMenuItem(
-            title: localised("Show Amanu window", "Показать окно amanu"),
+            title: localised("Show Jottie window", "Показать окно jottie"),
             action: #selector(showWindowClicked),
             keyEquivalent: "w"
         )
@@ -173,7 +173,7 @@ final class MenuBarController {
         // first, and an `.accessory` app's application menu is only on
         // screen while one of its windows is in front.
         let about = NSMenuItem(
-            title: localised("About Amanu", "О программе amanu"),
+            title: localised("About Jottie", "О программе jottie"),
             action: #selector(showAboutClicked),
             keyEquivalent: ""
         )
@@ -182,7 +182,7 @@ final class MenuBarController {
         menu.addItem(.separator())
 
         let quit = NSMenuItem(
-            title: localised("Quit Amanu", "Завершить amanu"),
+            title: localised("Quit Jottie", "Завершить jottie"),
             action: #selector(quitClicked),
             keyEquivalent: "q"
         )
@@ -242,7 +242,7 @@ final class MenuBarController {
     /// Show or hide **Setup…**. The wizard is the first run, and once it has
     /// been through, the same form is in Settings for good — what the wizard
     /// adds is the order things must happen in and the line saying what is
-    /// still outstanding, and both are answered by then. `amanu setup` resets
+    /// still outstanding, and both are answered by then. `jottie setup` resets
     /// the marker, so the item comes back whenever there is a first run to
     /// finish again.
     func setupAvailable(_ available: Bool) {
