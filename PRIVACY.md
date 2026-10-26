@@ -4,7 +4,7 @@ Recording and transcription run on this Mac. Jottie uses local Parakeet, Whisper
 
 ## Optional Codex analysis
 
-Enable analysis explicitly in Library Settings. Jottie gives your signed-in Codex CLI the full transcript, selected meeting/calendar context and folder labels. Codex sends this text to OpenAI using your ChatGPT account; its terms, policies and usage allowance apply. This is local transcription with optional remote text analysis, not a promise of fully offline AI. There is no metered API or alternate-provider fallback.
+Enable analysis explicitly in Settings. Meeting analysis gives your signed-in Codex CLI the full transcript, selected meeting/calendar context, folder labels, existing tag catalog and summary instructions. Folder context receives structured meeting summaries and evidence reference IDs from its subtree, without full transcripts or transcript evidence quotations. The model and effort are selectable in Settings. Codex sends the supplied text to OpenAI using your ChatGPT account; its terms, policies and usage allowance apply. There is no metered API or alternate-provider fallback.
 
 The subprocess uses ephemeral sessions, an isolated temporary directory, structured output and disabled tools/integrations. Temporary input, response and trace files are removed after the request completes. Jottie does not log raw transcript text to its processing ledger.
 

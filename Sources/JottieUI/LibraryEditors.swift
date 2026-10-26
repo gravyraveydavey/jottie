@@ -8,6 +8,8 @@ import JottieKnowledge
     @ObservedObject var model: LibraryViewModel
     @Environment(\.dismiss) var dismiss
     @ViewState private var preview = false
+    @ViewState private var promptKind = "meeting"
+    private var editedPrompt: Binding<String> { promptKind == "meeting" ? $model.settings.summaryPrompt : $model.settings.folderContextPrompt }
     var body: some View {
         VStack {
             TabView {
@@ -31,6 +33,21 @@ import JottieKnowledge
                         }
                         Text("Check verifies installation and ChatGPT sign-in. Test sends a small invented prompt using your Codex allowance.").font(.caption).foregroundStyle(.secondary)
                         if let result = model.codexTestMessage { Text(result).font(.callout).textSelection(.enabled) }
+                        Picker("Model", selection: $model.settings.codexModel) {
+                            Text("CLI default").tag("")
+                            ForEach(model.codexModels) { choice in Text(choice.name).tag(choice.id) }
+                            if !model.settings.codexModel.isEmpty && !model.codexModels.contains(where: { $0.id == model.settings.codexModel }) {
+                                Text(model.settings.codexModel).tag(model.settings.codexModel)
+                            }
+                        }
+                        TextField("Model ID (blank for CLI default)", text: $model.settings.codexModel)
+                            .onChange(of: model.settings.codexModel) { _, _ in
+                                if !model.codexEfforts.contains(model.settings.codexEffort) { model.settings.codexEffort = "" }
+                            }
+                        Picker("Reasoning effort", selection: $model.settings.codexEffort) {
+                            ForEach(model.codexEfforts, id: \.self) { effort in Text(effort.isEmpty ? "Model default" : effort.capitalized).tag(effort) }
+                        }
+                        Text("The list comes from your CLI. Model access depends on your account. These choices apply to summaries, tags and folder context; Test connection uses them too.").font(.caption).foregroundStyle(.secondary)
                         Stepper("Folder context check: \(model.settings.refreshMinutes) minutes", value: $model.settings.refreshMinutes, in: 1...10080)
                         Button("Update folder contexts now") { Task { if await model.saveSettings(processPending: false) { await model.updateNow() } } }
                     }
@@ -40,21 +57,31 @@ import JottieKnowledge
                     }
                     Section("Assistant access") {
                         Text("One local Jottie MCP connection exposes read-only meeting search, transcripts and folder context.")
+                        LabeledContent("Name", value: "Jottie")
+                        LabeledContent("Description", value: "Search local meeting summaries, transcripts and folder knowledge.")
+                        LabeledContent("Connection", value: "Local command · stdio")
+                        LabeledContent("Server URL / Tunnel", value: "Not used by this local service")
+                        LabeledContent("Authentication", value: "None · access uses your macOS account")
+                        Text("If Codex's connection window only offers Server URL or Tunnel, use the copied configuration in Codex Settings → Configuration → config.toml instead. Jottie does not expose an HTTP endpoint or create a tunnel. Codex sign-in is needed for analysis, not for MCP retrieval.").font(.caption).foregroundStyle(.secondary)
                         Button("Copy Codex MCP configuration") { model.copyMCPConfig() }
                     }
                 }.formStyle(.grouped).tabItem { Label("General", systemImage: "gearshape") }
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Summary instructions").font(.headline)
-                    Text("Applies to new analysis. Regenerate selected meetings to use a changed prompt. Evidence and publication rules always apply.").font(.caption).foregroundStyle(.secondary)
+                    Picker("Prompt", selection: $promptKind) {
+                        Text("Meeting summary").tag("meeting")
+                        Text("Folder context").tag("folder")
+                    }.pickerStyle(.segmented)
+                    Text(promptKind == "meeting" ? "Applies to new analysis. Regenerate selected meetings to use a changed prompt." : "Folder context reads structured meeting summaries across the subtree. Save, then Update folder contexts now to rebuild using this format.").font(.caption).foregroundStyle(.secondary)
+                    Text("Evidence and publication rules always apply.").font(.caption).foregroundStyle(.secondary)
                     if preview {
-                        ScrollView { Text(model.settings.summaryPrompt).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding() }
+                        ScrollView { Text(editedPrompt.wrappedValue).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding() }
                     } else {
-                        TextEditor(text: $model.settings.summaryPrompt).font(.body).border(.quaternary)
+                        TextEditor(text: editedPrompt).font(.body).border(.quaternary)
                     }
                     HStack {
                         Toggle("Preview", isOn: $preview).toggleStyle(.checkbox)
                         Spacer()
-                        Button("Reset default") { model.settings.summaryPrompt = Prompts.summary }
+                        Button("Reset default") { editedPrompt.wrappedValue = promptKind == "meeting" ? Prompts.summary : Prompts.folderContext }
                     }
                 }.padding().tabItem { Label("Summary", systemImage: "text.alignleft") }
                 VStack(alignment: .leading, spacing: 12) {
@@ -128,7 +155,7 @@ import JottieKnowledge
                     if let updated = model.folders.first(where: { $0.id == folder.id }) { folder = updated }
                 }
             }.disabled(remoteURL.isEmpty || folder.name.isEmpty)
-            Text("Applies to this folder and descendants unless a subfolder has its own destination. Inbox stays local.").font(.caption).foregroundStyle(.secondary)
+            Text("Applies to this folder and descendants unless a subfolder has its own destination. Unfiled meetings in Import stay local.").font(.caption).foregroundStyle(.secondary)
             if let message = model.message { Text(message).font(.caption).foregroundStyle(.secondary) }
             HStack {
                 if model.folders.contains(where: { $0.id == folder.id }) {

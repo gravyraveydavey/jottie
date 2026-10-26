@@ -10,10 +10,13 @@ public protocol StructuredRunner: Sendable {
 public struct CodexRunner: StructuredRunner {
     public let executable: String
     public var timeout: TimeInterval
-    public init(executable: String, timeout: TimeInterval = 1800) {
+    public var model: String
+    public var effort: String
+    public init(executable: String, timeout: TimeInterval = 1800, model: String = "", effort: String = "") {
         let value = executable.trimmingCharacters(in: .whitespacesAndNewlines)
         self.executable = value.isEmpty ? Self.discover() : NSString(string: value).expandingTildeInPath
         self.timeout = timeout
+        self.model = model; self.effort = effort
     }
     public static func discover() -> String {
         CodexInstallation.discover()
@@ -33,7 +36,7 @@ public struct CodexRunner: StructuredRunner {
             throw JottieError.invalid("Codex answered but did not return the expected connection-test result.")
         }
     }
-    public static func arguments(schema: URL, output: URL) -> [String] {
+    public static func arguments(schema: URL, output: URL, model: String = "", effort: String = "") -> [String] {
         var args = ["--no-daemon", "exec", "--ignore-user-config", "--ephemeral", "--skip-git-repo-check",
                     "--sandbox", "read-only", "--color", "never", "--json"]
         var configuration = ["forced_login_method=\"chatgpt\"", "model_provider=\"openai\"",
@@ -43,10 +46,13 @@ public struct CodexRunner: StructuredRunner {
                           "in_app_browser", "view_image", "image_generation", "code_mode", "code_mode_host",
                           "skill_search", "sleep_tool"].map { "features.\($0)=false" }
         configuration.append("features.skip_host_skill_discovery=true")
+        if !model.isEmpty { args += ["--model", model] }
+        if !effort.isEmpty { configuration.append("model_reasoning_effort=\"\(effort)\"") }
         for value in configuration { args += ["-c", value] }
         return args + ["--output-schema", schema.path, "-o", output.path, "-"]
     }
     public func run(prompt: String, schema: Data) async throws -> Data {
+        guard LibrarySettings.efforts.contains(effort) else { throw JottieError.invalid("Choose a supported Codex reasoning effort in Settings.") }
         guard FileManager.default.isExecutableFile(atPath: executable) else {
             throw JottieError.unavailable("Codex was not found. Choose its executable in Library Settings.")
         }
@@ -70,7 +76,7 @@ public struct CodexRunner: StructuredRunner {
         defer { try? stdin.close(); try? stdout.close(); try? stderr.close() }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
-        process.arguments = Self.arguments(schema: schemaURL, output: output)
+        process.arguments = Self.arguments(schema: schemaURL, output: output, model: model, effort: effort)
         process.currentDirectoryURL = dir
         process.environment = Self.environment(executable: executable)
         process.standardInput = stdin; process.standardOutput = stdout; process.standardError = stderr
@@ -97,6 +103,8 @@ public struct CodexRunner: StructuredRunner {
             let message: String
             if diagnostic.contains("unexpected argument") || diagnostic.contains("unrecognized") {
                 message = "Codex rejected the command-line options. Update the CLI or choose a compatible executable in Jottie Settings."
+            } else if (diagnostic.contains("model") || diagnostic.contains("reasoning effort")) && (diagnostic.contains("not supported") || diagnostic.contains("not available") || diagnostic.contains("does not exist")) {
+                message = "The selected Codex model or reasoning effort is unavailable. Choose a model supported by your account and retry."
             } else if diagnostic.contains("usage limit") || diagnostic.contains("quota") || diagnostic.contains("rate limit") {
                 message = "Codex usage is currently limited. Retry after your allowance resets."
             } else if diagnostic.contains("unauthorized") || diagnostic.contains("not logged in") || diagnostic.contains("authentication") {
@@ -138,7 +146,7 @@ enum Schemas {
         get throws {
             try JSONSerialization.data(withJSONObject: object([
                 "schemaVersion": ["type": "integer", "const": 1], "title": string, "summary": string,
-                "summaryEvidence": array(evidence), "topics": array(string), "tags": array(string),
+                "summaryEvidence": array(evidence), "topics": array(string), "tags": ["type": "array", "items": string, "maxItems": 10],
                 "primaryTag": nullable, "decisions": array(finding(["proposed", "confirmed", "rejected", "superseded", "unclear"])),
                 "actions": array(finding(["proposed", "committed", "in_progress", "blocked", "completed", "unclear"])),
                 "questions": array(finding(["open", "resolved", "unclear"])), "uncertainties": array(string),

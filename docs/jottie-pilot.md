@@ -22,6 +22,30 @@ Discovery is shared by the recorder diagnostics and the analysis pipeline. It ch
 
 On upgrade, an explicit `summary.backend: codex-cli` in Jottie's capture config enables native analysis only if summaries were not disabled and library settings have never been saved. Existing library settings, including an opt-out or edited prompt, always take precedence. Saving Jottie settings immediately schedules outstanding analysis; existing completed analyses regenerate only on request.
 
+General settings now offer model and reasoning-effort selection. The model menu comes from the selected CLI's bundled catalog; account availability is still checked by Codex. A model-ID field supports models absent from that catalog. Blank choices use the isolated CLI/model defaults. The same choices apply to meeting summaries, tags, connection tests and folder context; completed meeting analysis is regenerated only explicitly. See the [official per-run configuration reference](https://learn.chatgpt.com/docs/developer-settings).
+
+The Summary tab edits separate meeting-summary and folder-context prompts, each with preview/reset. Folder prompt/model changes mark context stale and rebuild it from the current subtree's structured meeting summaries. The reducer accepts `MeetingSummary` inputs, which contain no transcript field, and may cite only evidence already present in those summaries. Its prompt payload carries summary prose and source IDs, without transcript evidence quotations. Removals and changed source revisions continue to force reconstruction. Tags are capped at ten including the primary tag; analysis receives the existing tag catalog and normalises equivalent labels before saving. Existing over-limit records receive a local capped revision during reconciliation; the original revision stays in history and no Codex call is required.
+
+## Import and processing
+
+The former Inbox is labelled Import. It remains the unfiled meeting collection; recording and AI filing behaviour are unchanged. Import accepts folders recursively and individual `.md`, `.markdown`, `.txt`, `.doc` and `.docx` documents, with one document per meeting. Word conversion runs locally using macOS textutil and only extracted text is retained. UTF-8/UTF-16 text and original Markdown content are preserved. Original files are untouched, repeated documents are deduplicated, updates retain manual filing, and unreadable files are reported while other documents continue. Legacy Amanu meeting bundles still import once with their existing summary/metadata, without also importing their Markdown projections or audio. Hidden files, symlinks, packages and Jottie's own library are excluded from scanning.
+
+The expandable processing panel reports `Processing X of Y items (%)`, using successful completions from the current work set rather than unrelated historical jobs. Deferred/failed work stays in the expanded detail with retry controls; a failed item does not advance the completion percentage. Hover tooltips describe manager toolbar actions.
+
+## MCP connection fields
+
+Use Name **Jottie** and Description **Search local meeting summaries, transcripts and folder knowledge**. Connection is a **local stdio command**, launched from the copied `mcp_servers.jottie` configuration. Authentication is **none** for this local connection: access is limited by the macOS account and file permissions. Codex sign-in is separate and used only for analysis.
+
+The Codex dialog's **Server URL / Tunnel** choices describe other transports; neither is an address for this stdio service. When the dialog has no command transport, paste the copied block into Codex Settings → Configuration → config.toml. It includes the current executable and exact library directory. Jottie does not create a tunnel or expose an HTTP endpoint. [Codex configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference) documents the distinction between `command`/`args` and `url`. Remote/tunnel setup remains a later phase.
+
+## Custom UI scope
+
+See [Custom interface feasibility](custom-ui-feasibility.md). A custom component system is feasible in SwiftUI without replacing the backend or stack. The note scopes the work; the visual redesign is not implemented.
+
+## Feedback pass verification — 26 October 2026
+
+The full suite passed with 767 inherited Swift tests and 32 Jottie tests; the optional offscreen UI preview was skipped. The Python suite ran 26 tests with two optional skips. New coverage includes settings migration/model arguments, CLI model catalog parsing, summary-only folder payloads, prompt invalidation, evidence restrictions, capped/reused tags and retained historical revisions, recursive text/Word imports, deduplication/manual filing and batch progress. A live invented connection-test prompt succeeded with explicit `gpt-6.1-sol` and `low` reasoning selections. No real transcript was submitted for this test. Interactive checks of the newly added controls and tooltips remain part of the pilot's manual QA.
+
 Verified on 26 October 2026: the final packaged app discovered the ChatGPT-bundled Codex CLI 0.163.0-alpha.10.2 with a minimal `/usr/bin:/bin` PATH, confirmed ChatGPT sign-in and received a valid structured response to an invented connection-test prompt. The 767 inherited Swift tests and all 24 Jottie tests passed (the optional offscreen UI preview was skipped). Recording and transcription were idle before the previous development instance was closed and replaced. This check did not submit a real transcript.
 
 ## Manual verification

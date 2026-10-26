@@ -1,8 +1,14 @@
 import Foundation
 import Darwin
+import JottieModels
 
 /// Shared by capture diagnostics and the library; probes never submit meeting text.
 public enum CodexInstallation {
+    public struct ModelChoice: Sendable, Identifiable {
+        public let id: String
+        public let name: String
+        public let efforts: [String]
+    }
     public struct Status: Sendable {
         public let executable: String
         public let version: String?
@@ -60,6 +66,22 @@ public enum CodexInstallation {
             } catch {
                 return Status(executable: executable, version: nil, ready: false,
                               message: "Codex could not run or did not respond in time. Check its executable and try again.")
+            }
+        }.value
+    }
+
+    /// Read the selected CLI's bundled catalog locally; this does not spend model usage.
+    public static func models(path: String) async -> [ModelChoice] {
+        await Task.detached(priority: .utility) { () -> [ModelChoice] in
+            guard let result = try? command(path, ["--no-daemon", "debug", "models", "--bundled"]), result.status == 0,
+                  let start = result.output.firstIndex(of: "{"), let end = result.output.lastIndex(of: "}"),
+                  let catalog = try? JSONSerialization.jsonObject(with: Data(result.output[start...end].utf8)) as? [String: Any],
+                  let models = catalog["models"] as? [[String: Any]] else { return [] }
+            var seen = Set<String>()
+            return models.compactMap { item in
+                guard let id = item["slug"] as? String, item["visibility"] as? String == "list", seen.insert(id).inserted else { return nil }
+                let levels = (item["supported_reasoning_levels"] as? [[String: Any]] ?? []).compactMap { $0["effort"] as? String }.filter(LibrarySettings.efforts.contains)
+                return ModelChoice(id: id, name: item["display_name"] as? String ?? id, efforts: levels)
             }
         }.value
     }

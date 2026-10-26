@@ -101,8 +101,12 @@ public actor LibraryStore: MeetingRepository {
     }
     public func saveSettings(_ settings: LibrarySettings) throws {
         guard (1...10080).contains(settings.refreshMinutes), settings.summaryPrompt.utf8.count <= 100_000,
-              !settings.summaryPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        else { throw JottieError.invalid("Use a nonempty prompt and an interval of 1–10080 minutes.") }
+              !settings.summaryPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              settings.folderContextPrompt.utf8.count <= 100_000,
+              !settings.folderContextPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              LibrarySettings.efforts.contains(settings.codexEffort),
+              settings.codexModel.isEmpty || settings.codexModel.range(of: "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$", options: .regularExpression) != nil
+        else { throw JottieError.invalid("Use nonempty prompts, a valid model ID and effort, and an interval of 1–10080 minutes.") }
         try locked { try write(settings, root.appendingPathComponent("settings.json")) }
     }
     /// Adopt only an explicit Codex choice from this fork's old capture settings.
@@ -121,6 +125,11 @@ public actor LibraryStore: MeetingRepository {
         try locked { try commit(meeting) }
     }
     private func commit(_ meeting: Meeting) throws {
+        var meeting = meeting
+        if let revision = meeting.analysis, revision.analysis.tags.count > 10 {
+            meeting.analysis = AnalysisRevision(transcriptRevision: revision.transcriptRevision, promptRevision: revision.promptRevision,
+                analysis: MeetingTags.applying(to: revision.analysis, existing: []))
+        }
         let knownFolders = try folders()
         let transcriptDigest = Codec.hash(try Codec.encode(meeting.segments))
         guard meeting.schemaVersion == 1, Set(meeting.segments.map(\.id)).count == meeting.segments.count,
@@ -293,6 +302,11 @@ public actor LibraryStore: MeetingRepository {
         }
     }
     public func reconcile() throws {
+        if !readOnly {
+            try locked {
+                for meeting in try meetings() where (meeting.analysis?.analysis.tags.count ?? 0) > 10 { try commit(meeting) }
+            }
+        }
         let current = try projectionFingerprint()
         let indexed = try? index?.read { db in try String.fetchOne(db, sql: "SELECT value FROM projection_meta WHERE key='revision'") }
         if current != indexed { try rebuildIndex() }
@@ -375,19 +389,19 @@ public actor LibraryStore: MeetingRepository {
         guard FileManager.default.fileExists(atPath: path.path) else { return nil }
         return try read(FolderContext.self, path)
     }
-    public static func contextFingerprint(folder: Folder, folders: [Folder], meetings: [Meeting]) -> String {
+    public static func contextFingerprint(folder: Folder, folders: [Folder], meetings: [Meeting], settings: LibrarySettings = LibrarySettings()) -> String {
         let subtree = descendants(folder.id, in: folders)
         let parts = meetings.filter { $0.folderID.map(subtree.contains) == true }.map {
             "\($0.id):\($0.transcriptRevision):\($0.analysis?.id ?? "pending")"
         }.sorted()
         let tree = folders.filter { subtree.contains($0.id) }.sorted { $0.id.uuidString < $1.id.uuidString }
-        return Codec.hash("folder-context-v1\n" + parts.joined(separator: "\n") + ((try? String(decoding: Codec.encode(tree), as: UTF8.self)) ?? ""))
+        return Codec.hash("folder-context-v2\n" + settings.contextRevision + parts.joined(separator: "\n") + ((try? String(decoding: Codec.encode(tree), as: UTF8.self)) ?? ""))
     }
     public func saveContext(_ context: FolderContext) throws {
         try locked {
             let allFolders = try folders()
             guard let folder = allFolders.first(where: { $0.id == context.folderID }),
-                  context.inputRevision == Self.contextFingerprint(folder: folder, folders: allFolders, meetings: try meetings())
+                  context.inputRevision == Self.contextFingerprint(folder: folder, folders: allFolders, meetings: try meetings(), settings: try settings())
             else { throw JottieError.conflict("Folder membership changed during context generation.") }
             let dir = root.appendingPathComponent("Contexts/\(context.folderID.uuidString)")
             try Self.directory(dir); try Self.directory(dir.appendingPathComponent("History"))
@@ -465,5 +479,46 @@ public actor LibraryStore: MeetingRepository {
             try commit(value)
             return value
         }
+    }
+
+    public func importTranscripts(from urls: [URL]) throws -> TranscriptImportReport {
+        let scan = try TranscriptDocuments.scan(urls, excluding: root)
+        var report = TranscriptImportReport(); report.failures = scan.failures
+        for directory in scan.legacy {
+            do {
+                let previous = Set(try meetings().map(\.id))
+                let value = try importAmanu(directory)
+                if previous.contains(value.id) { report.unchanged += 1 } else { report.imported += 1 }
+            } catch { report.failures.append("\(directory.lastPathComponent): \(error.localizedDescription)") }
+        }
+        for url in scan.files {
+            do {
+                let document = try TranscriptDocuments.text(url)
+                guard !document.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+                let sourceID = Codec.hash("document:" + url.standardizedFileURL.path)
+                let segments = [Segment(id: "s1", speaker: "unknown", text: document.text)]
+                let changed = try locked {
+                    let existing = try meetings().first { $0.sourceID == sourceID || $0.sourceMetadata?["documentSHA256"] == document.digest }
+                    var value = existing ?? Meeting(sourceID: sourceID, title: url.deletingPathExtension().lastPathComponent,
+                        startedAt: (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? Date(), segments: segments)
+                    if let existing, existing.sourceMetadata?["documentSHA256"] == document.digest { return false }
+                    let fresh = Meeting(sourceID: sourceID, title: value.title, segments: segments)
+                    if value.transcriptRevision != fresh.transcriptRevision {
+                        value.segments = segments; value.transcriptRevision = fresh.transcriptRevision; value.analysis = nil
+                    }
+                    var metadata = value.sourceMetadata ?? [:]
+                    metadata["documentSHA256"] = document.digest
+                    metadata["importFormat"] = url.pathExtension.lowercased()
+                    value.sourceMetadata = metadata
+                    let history = meetingDirectory(value.id).appendingPathComponent("SourceTextHistory")
+                    try Self.directory(history)
+                    try Data(document.text.utf8).write(to: history.appendingPathComponent(document.digest + ".txt"), options: .atomic)
+                    try commit(value)
+                    return true
+                }
+                if changed { report.imported += 1 } else { report.unchanged += 1 }
+            } catch { report.failures.append("\(url.lastPathComponent): \(error.localizedDescription)") }
+        }
+        return report
     }
 }

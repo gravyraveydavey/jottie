@@ -200,12 +200,10 @@ private actor CountingAnalyzer: MeetingAnalyzer {
 }
 private actor CountingContext: FolderContextService {
     var calls = 0
-    func update(folder: Folder, meetings: [Meeting], previous: FolderContext?) -> FolderContext {
+    func update(folder: Folder, summaries: [MeetingSummary], previous: FolderContext?) -> FolderContext {
         calls += 1
-        return FolderContext(folderID: folder.id, inputRevision: "", overview: "\(meetings.count) meetings",
-            sources: meetings.compactMap { meeting in
-                meeting.analysis.map { ContextSource(meetingID: meeting.id, revision: $0.id, segmentID: "s1") }
-            })
+        return FolderContext(folderID: folder.id, inputRevision: "", overview: "\(summaries.count) meetings",
+            sources: summaries.map { ContextSource(meetingID: $0.id, revision: $0.analysis.id, segmentID: "s1") })
     }
 }
 
@@ -255,7 +253,7 @@ private actor CountingContext: FolderContextService {
     let folder = Folder(name: "Current")
     let old = FolderContext(folderID: folder.id, inputRevision: "old", overview: "OLD SECRET",
         sources: [ContextSource(meetingID: UUID(), revision: "removed", segmentID: "s1")])
-    let result = try await CodexFolderContext(runner: runner).update(folder: folder, meetings: [meeting], previous: old)
+    let result = try await CodexFolderContext(runner: runner).update(folder: folder, summaries: [MeetingSummary(meeting)!], previous: old)
     #expect(result.sources == [source])
     #expect(await runner.prompts.first?.contains("OLD SECRET") == false)
 }

@@ -10,6 +10,14 @@ public struct WorkStatus: Sendable, Identifiable {
     public var message: String?
 }
 
+public struct ProcessingProgress: Sendable, Equatable {
+    public var completed: Int
+    public var total: Int
+    public init(completed: Int = 0, total: Int = 0) { self.total = max(0, total); self.completed = min(max(0, completed), max(0, total)) }
+    public var percent: Int { total == 0 ? 0 : Int((Double(completed) / Double(total) * 100).rounded(.down)) }
+    public var label: String { "Processing \(completed) of \(total) items (\(percent)%)" }
+}
+
 /// Operational state deliberately does not share the rebuildable search database.
 public actor WorkLedger {
     private let queue: DatabaseQueue
@@ -61,9 +69,24 @@ public actor WorkLedger {
     }
     public func statuses() throws -> [WorkStatus] {
         try queue.read { db in
-            try Row.fetchAll(db, sql: "SELECT * FROM jobs WHERE state != 'done' ORDER BY stage,id").map {
+            try Row.fetchAll(db, sql: "SELECT * FROM jobs WHERE state NOT IN ('done','superseded') ORDER BY stage,id").map {
                 WorkStatus(id: $0["id"], stage: $0["stage"], state: $0["state"], attempts: $0["attempts"], message: $0["message"])
             }
+        }
+    }
+    /// Keep obsolete retries as history, without displaying them as current work.
+    public func supersede(prefix: String, keeping ids: Set<String>) throws {
+        try queue.write { db in
+            let candidates = try String.fetchAll(db, sql: "SELECT id FROM jobs WHERE state NOT IN ('done','superseded','running')")
+            for id in candidates where id.hasPrefix(prefix) && !ids.contains(id) {
+                try db.execute(sql: "UPDATE jobs SET state='superseded',next=0 WHERE id=?", arguments: [id])
+            }
+        }
+    }
+    public func progress(ids: Set<String>) throws -> ProcessingProgress {
+        try queue.read { db in
+            let done = Set(try String.fetchAll(db, sql: "SELECT id FROM jobs WHERE state='done'"))
+            return ProcessingProgress(completed: ids.intersection(done).count, total: ids.count)
         }
     }
 }

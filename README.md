@@ -7,11 +7,13 @@ A native macOS meeting library built on Amanu’s MIT-licensed recording and loc
 1. Build and launch `Jottie.app` using `make app` and `open .build/Jottie.app`. Complete microphone/system-audio setup and download a local transcription model.
 2. Open **Recordings** from the recording window or menu bar to show the new library. You can also run `jottie library` to open the library without capture.
 3. Open **Settings → General** from the app menu or library gear and enable automatic Codex analysis. The status shows the detected executable, version and ChatGPT sign-in; **Check Codex** refreshes it. **Test connection** submits a small invented prompt using your Codex allowance. Select an executable if automatic discovery cannot find it. Transcripts and selected context go to OpenAI; subscription usage limits apply. There is no paid API fallback.
-4. Create your folder tree. Folder names and comma-separated aliases match the AI’s primary tag. Unknown or ambiguous matches stay in Inbox. Dragging a meeting makes its assignment authoritative until you move it again.
+4. Create your folder tree. Folder names and comma-separated aliases match the AI’s primary tag. Unknown or ambiguous matches stay in Import. Dragging a meeting makes its assignment authoritative until you move it again.
 5. Choose calendars under **Settings → Calendars**. Enable calendar context separately under Recording settings and relaunch. Calendar invitees are candidates, not verified speakers.
 6. Folder context checks default to hourly while the app runs. Change the interval or use **Update now**. Parents include descendant meetings. Pending changes show the last successful context as stale.
 
-**Import Amanu records** copies text and metadata from meeting folders (or a recordings root), preserves originals, deduplicates repeat imports and excludes audio. Select one or multiple meetings and use **Export Markdown** to write UUID-named files. **Speakers** corrects channel labels without changing source utterances; regenerate analysis explicitly to apply corrections to summaries.
+**Import transcripts** scans folders and subfolders for Markdown, text and Word documents, or imports selected files. It preserves originals, deduplicates repeats and excludes audio. Existing Amanu meeting bundles retain their text and metadata. **Import** in the sidebar contains unfiled records. Select one or multiple meetings and use **Export Markdown** to write UUID-named files. **Speakers** corrects channel labels without changing source utterances; regenerate analysis explicitly to apply corrections to summaries.
+
+**Settings → General** selects the Codex model and reasoning effort; **Settings → Summary** edits separate meeting and folder prompts. Folder context rolls up structured meeting summaries, with evidence links, rather than sending nested transcripts. Tags reuse the existing catalog where suitable and are capped at ten per meeting. See [custom UI feasibility](docs/custom-ui-feasibility.md) for the planned design scope.
 
 ## Storage and recovery
 
@@ -46,7 +48,7 @@ Tools: `search_meetings`, `get_meeting`, `get_transcript`, `list_folders`, `get_
 
 ## SharePoint / OneDrive
 
-See [Microsoft pilot onboarding](docs/jottie-microsoft.md). Register an approved public macOS application, enter tenant/client IDs in Settings, sign in, and explicitly connect selected folder subtrees to existing destination folder links. Inbox remains local. Microsoft permission or consent failures hold publication; Jottie never broadens scopes automatically.
+See [Microsoft pilot onboarding](docs/jottie-microsoft.md). Register an approved public macOS application, enter tenant/client IDs in Settings, sign in, and explicitly connect selected folder subtrees to existing destination folder links. Unfiled meetings in Import remain local. Microsoft permission or consent failures hold publication; Jottie never broadens scopes automatically.
 
 Publishing produces text, Markdown and JSON, never audio or capture logs. Stable-ID meeting folders retain immutable revisions with a current manifest. Folder knowledge has immutable history plus a version-checked **Current Context.txt**. Remote edits are held for review rather than overwritten. Local moves and deletion do not delete previously published records.
 

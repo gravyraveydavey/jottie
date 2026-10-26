@@ -108,7 +108,7 @@ public actor JottieServer {
             let folders = try await store.folders()
             guard let folder = folders.first(where: { $0.id == id }) else { throw JottieError.invalid("Unknown folder.") }
             let context = try await store.context(id)
-            let fingerprint = LibraryStore.contextFingerprint(folder: folder, folders: folders, meetings: try await store.meetings())
+            let fingerprint = LibraryStore.contextFingerprint(folder: folder, folders: folders, meetings: try await store.meetings(), settings: try await store.settings())
             result = ["folderID": id.uuidString, "context": try context.map(json) ?? NSNull(),
                       "stale": context?.inputRevision != fingerprint]
         default: throw JottieError.invalid("Unknown tool.")

@@ -5,7 +5,7 @@ Microsoft tenant registration and sign-in are external prerequisites. Jottie nev
 1. In the approved Entra tenant, register a public native application for Jottie.
 2. Configure the iOS/macOS platform with bundle identifier com.gravyraveydavey.jottie and redirect URI msauth.com.gravyraveydavey.jottie://auth.
 3. Enable delegated Microsoft Graph User.Read and Files.ReadWrite, obtaining tenant approval where required. Do not configure a client secret in this native app.
-4. Build/sign and open Jottie. Under Library Settings → Microsoft, enter the application/client and tenant UUIDs, then choose Save and sign in.
+4. Build/sign and open Jottie. Under Settings → Microsoft, enter the application/client and tenant UUIDs, then choose Save and sign in.
 5. Review Microsoft's consent screen. MSAL stores its cache in Jottie's private Keychain group.
 6. Select an existing test folder in SharePoint/OneDrive. Copy its folder sharing link; Jottie resolves it using the signed-in account's granted access.
 7. Edit a local folder, paste the remote folder link and connect it. This explicitly enables publishing for that subtree. A child with its own destination overrides inheritance.

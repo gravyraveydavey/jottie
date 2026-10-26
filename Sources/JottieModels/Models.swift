@@ -225,6 +225,7 @@ public struct FolderContext: Codable, Sendable, Equatable {
     public var schemaVersion = 1
     public var folderID: UUID
     public var inputRevision: String
+    public var configurationRevision: String?
     public var generatedAt: Date
     public var overview: String
     public var decisions: [ContextEntry]
@@ -263,18 +264,67 @@ public enum Prompts {
     Distinguish proposals from approval, requests from commitments, and discussion from completion.
     Unknown owners and deadlines are null. Calendar participants are invitees, not verified speakers.
     """
+    public static let folderContext = """
+    Write a concise, outcome-focused overview of this folder using its meeting summaries.
+    Lead with the current position, durable objectives, material changes and caveats.
+    Maintain decisions, open actions and follow-up questions. Distinguish proposals from
+    commitments and completed work. Preserve unresolved contradictions as open questions.
+    Scale detail to the evidence and avoid repeating the same point across meetings.
+    """
 }
 
 public struct LibrarySettings: Codable, Sendable, Equatable {
-    public var schemaVersion = 1
+    public var schemaVersion = 2
     public var summaryPrompt = Prompts.summary
+    public var folderContextPrompt = Prompts.folderContext
     public var refreshMinutes = 60
     public var analysisEnabled = false
     public var codexPath = ""
+    public var codexModel = ""
+    public var codexEffort = ""
     public var selectedCalendarIDs: [String] = []
     public var microsoftClientID = ""
     public var microsoftTenantID = ""
     public init() {}
+    public static let efforts = ["", "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"]
+    public var analysisRevision: String { Codec.hash(summaryPrompt + "\n" + codexModel + "\n" + codexEffort + "\ntag-policy-v1") }
+    public var contextRevision: String { Codec.hash(folderContextPrompt + "\n" + codexModel + "\n" + codexEffort + "\nsummary-only-v2") }
+    enum CodingKeys: String, CodingKey {
+        case schemaVersion, summaryPrompt, folderContextPrompt, refreshMinutes, analysisEnabled, codexPath,
+             codexModel, codexEffort, selectedCalendarIDs, microsoftClientID, microsoftTenantID
+    }
+    public init(from decoder: Decoder) throws {
+        self.init()
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        let version = try values.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+        guard (1...2).contains(version) else { throw JottieError.invalid("Unsupported library settings version.") }
+        summaryPrompt = try values.decodeIfPresent(String.self, forKey: .summaryPrompt) ?? summaryPrompt
+        folderContextPrompt = try values.decodeIfPresent(String.self, forKey: .folderContextPrompt) ?? folderContextPrompt
+        refreshMinutes = try values.decodeIfPresent(Int.self, forKey: .refreshMinutes) ?? refreshMinutes
+        analysisEnabled = try values.decodeIfPresent(Bool.self, forKey: .analysisEnabled) ?? analysisEnabled
+        codexPath = try values.decodeIfPresent(String.self, forKey: .codexPath) ?? codexPath
+        codexModel = try values.decodeIfPresent(String.self, forKey: .codexModel) ?? codexModel
+        codexEffort = try values.decodeIfPresent(String.self, forKey: .codexEffort) ?? codexEffort
+        selectedCalendarIDs = try values.decodeIfPresent([String].self, forKey: .selectedCalendarIDs) ?? []
+        microsoftClientID = try values.decodeIfPresent(String.self, forKey: .microsoftClientID) ?? ""
+        microsoftTenantID = try values.decodeIfPresent(String.self, forKey: .microsoftTenantID) ?? ""
+    }
+}
+
+/// The context reducer's input cannot contain a meeting's transcript or capture metadata.
+public struct MeetingSummary: Codable, Sendable {
+    public let id: UUID
+    public let title: String
+    public let startedAt: Date
+    public let analysis: AnalysisRevision
+    public init?(_ meeting: Meeting) {
+        guard let analysis = meeting.analysis else { return nil }
+        id = meeting.id; title = meeting.title; startedAt = meeting.startedAt; self.analysis = analysis
+    }
+    public var sources: Set<ContextSource> {
+        let evidence = analysis.analysis.summaryEvidence + (analysis.analysis.decisions + analysis.analysis.actions + analysis.analysis.questions).flatMap(\.evidence)
+        return Set(evidence.map { ContextSource(meetingID: id, revision: analysis.id, segmentID: $0.segmentID) })
+    }
 }
 
 public struct SearchQuery: Sendable {
@@ -313,7 +363,7 @@ public struct CalendarChoice: Sendable, Identifiable {
     func choices() async throws -> [CalendarChoice]
 }
 public protocol FolderContextService: Sendable {
-    func update(folder: Folder, meetings: [Meeting], previous: FolderContext?) async throws -> FolderContext
+    func update(folder: Folder, summaries: [MeetingSummary], previous: FolderContext?) async throws -> FolderContext
 }
 public protocol MeetingPublisher: Sendable {
     func publish(meeting: Meeting, to destination: PublishDestination) async throws

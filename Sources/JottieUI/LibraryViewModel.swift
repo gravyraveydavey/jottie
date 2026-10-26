@@ -28,6 +28,7 @@ import JottieKnowledge
     @Published public var folders: [Folder] = []
     @Published public var contexts: [UUID: FolderContext] = [:]
     @Published public var jobs: [WorkStatus] = []
+    @Published public var progress = ProcessingProgress()
     @Published public var selection = Set<UUID>()
     @Published public var location = "all"
     @Published public var query = ""
@@ -43,6 +44,7 @@ import JottieKnowledge
     @Published public var accountID = ""
     @Published public var settingsOpen = false
     @Published public var codexStatus: CodexInstallation.Status?
+    @Published public var codexModels: [CodexInstallation.ModelChoice] = []
     @Published public var checkingCodex = false
     @Published public var testingCodex = false
     @Published public var codexTestMessage: String?
@@ -75,6 +77,7 @@ import JottieKnowledge
             var loaded: [UUID: FolderContext] = [:]
             for folder in folders { loaded[folder.id] = try await store.context(folder.id) }
             contexts = loaded; jobs = try await coordinator.ledger.statuses()
+            progress = try await coordinator.processingProgress()
             await search()
         } catch { message = error.localizedDescription }
     }
@@ -102,6 +105,7 @@ import JottieKnowledge
     public func loadMore() async { requestedPages += 1; await search() }
     @discardableResult public func saveSettings(processPending: Bool = true) async -> Bool {
         do {
+            settings.codexModel = settings.codexModel.trimmingCharacters(in: .whitespacesAndNewlines)
             try await store.saveSettings(settings)
             message = "Settings saved. Existing analyses are unchanged."
             if processPending { Task { await coordinator.run(); await reload() } }
@@ -118,7 +122,14 @@ import JottieKnowledge
         checkingCodex = true; defer { checkingCodex = false }
         let path = settings.codexPath
         let result = await CodexInstallation.probe(path: path)
-        if settings.codexPath == path { codexStatus = result }
+        if settings.codexPath == path {
+            codexStatus = result
+            let choices = result.version == nil ? [] : await CodexInstallation.models(path: result.executable)
+            if settings.codexPath == path { codexModels = choices }
+        }
+    }
+    public var codexEfforts: [String] {
+        [""] + (codexModels.first { $0.id == settings.codexModel }?.efforts ?? Array(LibrarySettings.efforts.dropFirst()))
     }
     public func testCodex() async {
         guard !testingCodex else { return }
@@ -127,7 +138,7 @@ import JottieKnowledge
         await checkCodex()
         guard let status = codexStatus, status.ready else { return }
         do {
-            try await CodexRunner(executable: status.executable, timeout: 120).testConnection()
+            try await CodexRunner(executable: status.executable, timeout: 120, model: settings.codexModel, effort: settings.codexEffort).testConnection()
             codexTestMessage = "Connection successful. Codex returned a valid structured response."
         } catch { codexTestMessage = error.localizedDescription }
     }
@@ -153,26 +164,18 @@ import JottieKnowledge
         }
         return false
     }
-    public func importAmanu() {
+    public func importTranscripts() {
         let panel = NSOpenPanel()
-        panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.allowsMultipleSelection = true
-        panel.message = "Select Amanu meeting folders or a recordings folder. Only text and metadata are copied."
+        panel.canChooseDirectories = true; panel.canChooseFiles = true; panel.allowsMultipleSelection = true
+        panel.message = "Choose folders containing transcripts, or individual Markdown, text or Word documents (.md, .txt, .doc, .docx). Subfolders are included. Originals are preserved."
         guard panel.runModal() == .OK else { return }
         let urls = panel.urls
         Task {
             working = true; defer { working = false }
             do {
-                var count = 0
-                for url in urls {
-                    let candidates: [URL]
-                    if FileManager.default.fileExists(atPath: url.appendingPathComponent("transcript.json").path) { candidates = [url] }
-                    else {
-                        candidates = try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])
-                            .filter { FileManager.default.fileExists(atPath: $0.appendingPathComponent("transcript.json").path) }
-                    }
-                    for candidate in candidates { _ = try await store.importAmanu(candidate); count += 1 }
-                }
-                message = "Imported \(count) meeting records. Originals were preserved."
+                let report = try await store.importTranscripts(from: urls)
+                message = "Imported/updated \(report.imported) transcripts; \(report.unchanged) unchanged, \(report.failures.count) could not be read. Originals preserved."
+                    + report.failures.prefix(3).map { "\n" + $0 }.joined()
                 await coordinator.run(); await reload()
             } catch { message = error.localizedDescription }
         }
@@ -236,7 +239,7 @@ import JottieKnowledge
         let config = """
         [mcp_servers.jottie]
         command = "\(executable.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\""))"
-        args = ["mcp", "serve"]
+        args = ["mcp", "serve", "--library", "\(store.root.path.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\""))"]
         """
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(config, forType: .string)

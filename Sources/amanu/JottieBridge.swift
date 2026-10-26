@@ -94,18 +94,27 @@ import JottieMCP
 struct CodexCommand: ParsableCommand {
     static let configuration = CommandConfiguration(commandName: "codex", abstract: "Check Codex discovery, sign-in and the summary connection.")
     @Option(name: .long, help: "Executable path (automatic if omitted).") var executable = ""
+    @Option(name: .long, help: "Library settings directory (default: Application Support/Jottie).") var library: String?
+    @Option(name: .long, help: "Model ID override (otherwise use Jottie settings).") var model: String?
+    @Option(name: .long, help: "Reasoning effort override (otherwise use Jottie settings).") var effort: String?
     @Flag(name: .long, help: "Also submit a small invented prompt using your Codex allowance.") var test = false
     func run() throws {
-        let path = executable, shouldTest = test
+        let path = executable, shouldTest = test, modelOverride = model, effortOverride = effort
+        let root = library.map { URL(fileURLWithPath: $0, isDirectory: true) } ?? LibraryStore.defaultRoot
         Task {
-            let status = await CodexInstallation.probe(path: path)
+            let settings: LibrarySettings
+            do { settings = try await LibraryStore(root: root, readOnly: true).settings() }
+            catch {
+                FileHandle.standardError.write(Data("Jottie settings could not be read. Check the library directory.\n".utf8)); Darwin.exit(1)
+            }
+            let status = await CodexInstallation.probe(path: path.isEmpty ? settings.codexPath : path)
             print(status.message)
             if let version = status.version { print(version) }
             if !status.executable.isEmpty { print(status.executable) }
             guard status.ready else { Darwin.exit(1) }
             if shouldTest {
                 do {
-                    try await CodexRunner(executable: status.executable, timeout: 120).testConnection()
+                    try await CodexRunner(executable: status.executable, timeout: 120, model: modelOverride ?? settings.codexModel, effort: effortOverride ?? settings.codexEffort).testConnection()
                     print("Connection successful: valid structured response.")
                 } catch {
                     FileHandle.standardError.write(Data("\(error.localizedDescription)\n".utf8)); Darwin.exit(1)

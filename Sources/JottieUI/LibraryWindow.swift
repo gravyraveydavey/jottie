@@ -46,11 +46,12 @@ typealias ViewState<Value> = SwiftUI.State<Value>
         VStack(spacing: 0) {
             NavigationSplitView { sidebar } content: { contentPane } detail: { detailPane }
             if let message = model.message {
-                HStack { Text(message).font(.callout); Spacer(); Button { model.message = nil } label: { Image(systemName: "xmark") } }
+                HStack { Text(message).font(.callout); Spacer(); Button { model.message = nil } label: { Image(systemName: "xmark") }.help("Dismiss this message") }
                     .padding(10).background(.quaternary)
             }
-            if !model.jobs.isEmpty {
-                DisclosureGroup("\(model.jobs.count) processing item(s) need attention") {
+            if model.progress.total > 0 || !model.jobs.isEmpty {
+                DisclosureGroup(model.progress.label) {
+                    ProgressView(value: Double(model.progress.completed), total: Double(max(1, model.progress.total)))
                     ScrollView {
                         ForEach(model.jobs) { job in
                             HStack {
@@ -68,12 +69,13 @@ typealias ViewState<Value> = SwiftUI.State<Value>
         .toolbar {
             ToolbarItemGroup {
                 Button { model.onRecord?() } label: { Label("Record", systemImage: "record.circle") }
-                Button { model.importAmanu() } label: { Label("Import", systemImage: "square.and.arrow.down") }
-                Button { model.export() } label: { Label("Export Markdown", systemImage: "square.and.arrow.up") }.disabled(model.selection.isEmpty)
-                Button { Task { await model.regenerate() } } label: { Label("Regenerate analysis", systemImage: "sparkles") }.disabled(model.selection.isEmpty || model.working)
-                Button { speakerSheet = true } label: { Label("Speakers", systemImage: "person.2") }.disabled(model.selection.count != 1)
-                Button { model.trashSelection() } label: { Label("Trash", systemImage: "trash") }.disabled(model.selection.isEmpty)
-                Button { Task { await model.openSettings() } } label: { Label("Settings", systemImage: "gearshape") }
+                    .help("Start or stop a meeting recording")
+                Button { model.importTranscripts() } label: { Label("Import", systemImage: "square.and.arrow.down") }.help("Import transcript folders, Markdown, text or Word documents")
+                Button { model.export() } label: { Label("Export Markdown", systemImage: "square.and.arrow.up") }.disabled(model.selection.isEmpty).help("Export selected meetings as Markdown")
+                Button { Task { await model.regenerate() } } label: { Label("Regenerate analysis", systemImage: "sparkles") }.disabled(model.selection.isEmpty || model.working).help("Regenerate summaries and tags for selected meetings using current settings")
+                Button { speakerSheet = true } label: { Label("Speakers", systemImage: "person.2") }.disabled(model.selection.count != 1).help("Correct speaker names for the selected meeting")
+                Button { model.trashSelection() } label: { Label("Trash", systemImage: "trash") }.disabled(model.selection.isEmpty).help("Move selected meetings to local Trash")
+                Button { Task { await model.openSettings() } } label: { Label("Settings", systemImage: "gearshape") }.help("Open Jottie settings, Codex, prompts and MCP setup")
             }
         }
         .sheet(isPresented: $model.settingsOpen) { LibrarySettingsView(model: model) }
@@ -100,7 +102,8 @@ typealias ViewState<Value> = SwiftUI.State<Value>
                 List(selection: $model.location) {
                     Label("All Meetings", systemImage: "rectangle.stack").tag("all")
                         .dropDestination(for: String.self) { values, _ in model.drop(values, into: nil) }
-                    Label("Inbox", systemImage: "tray").tag("inbox")
+                    Label("Import", systemImage: "tray").tag("inbox")
+                        .help("Unfiled recordings and imported transcripts; drag meetings into folders to file them")
                         .dropDestination(for: String.self) { values, _ in model.drop(values, into: nil) }
                     Section("Folders") {
                         ForEach(model.flatFolders, id: \.folder.id) { item in
@@ -119,7 +122,7 @@ typealias ViewState<Value> = SwiftUI.State<Value>
                 }
                 .navigationTitle("Jottie")
                 .safeAreaInset(edge: .bottom) {
-                    Button { editingFolder = Folder(name: "") } label: { Label("New folder", systemImage: "folder.badge.plus") }.padding()
+                    Button { editingFolder = Folder(name: "") } label: { Label("New folder", systemImage: "folder.badge.plus") }.help("Create a folder for meetings and shared context").padding()
                 }
                 .navigationSplitViewColumnWidth(min: 180, ideal: 220)
 
@@ -145,12 +148,12 @@ typealias ViewState<Value> = SwiftUI.State<Value>
                             Text(folder.name).font(.headline)
                             Spacer()
                             Button("Context") { model.selection = [] }
-                            Button { editingFolder = folder } label: { Image(systemName: "ellipsis") }
+                            Button { editingFolder = folder } label: { Image(systemName: "ellipsis") }.help("Edit folder name, aliases, parent and publication destination")
                         }.padding(10)
                     }
                     MeetingListPane(model: model)
                 }
-                .navigationTitle(model.selectedFolder?.name ?? (model.location == "inbox" ? "Inbox" : "Meetings"))
+                .navigationTitle(model.selectedFolder?.name ?? (model.location == "inbox" ? "Import" : "Meetings"))
                 .navigationSplitViewColumnWidth(min: 280, ideal: 360)
 
     }
@@ -164,8 +167,8 @@ typealias ViewState<Value> = SwiftUI.State<Value>
                     VStack(spacing: 12) {
                         Image(systemName: "waveform.bubble").font(.system(size: 48)).foregroundStyle(.secondary)
                         Text("Your meetings, connected").font(.title2)
-                        Text("Select a meeting, import Amanu records, or start recording.").foregroundStyle(.secondary)
-                        Button("Import Amanu records…") { model.importAmanu() }
+                        Text("Select a meeting, import transcript folders, or start recording.").foregroundStyle(.secondary)
+                        Button("Import transcripts…") { model.importTranscripts() }
                     }.frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
 
@@ -265,7 +268,7 @@ private struct FolderDetail: View {
                 }
                 Text("Includes meetings in all subfolders. Checks every \(model.settings.refreshMinutes) minutes.").font(.caption).foregroundStyle(.secondary)
                 if let context = model.contexts[folder.id] {
-                    let expected = LibraryStore.contextFingerprint(folder: folder, folders: model.folders, meetings: model.meetings)
+                    let expected = LibraryStore.contextFingerprint(folder: folder, folders: model.folders, meetings: model.meetings, settings: model.settings)
                     Text(context.inputRevision == expected ? "Up to date" : "Changes pending · showing last successful context").foregroundStyle(context.inputRevision == expected ? Color.secondary : Color.orange)
                     Text(context.overview).textSelection(.enabled)
                     ContextSections(context: context)
