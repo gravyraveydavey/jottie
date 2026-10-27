@@ -17,8 +17,10 @@ import JottieMCP
     private var processing: Task<Void, Never>?
     private var captureRoot: URL?
     private var errorMessage: String?
+    private var capture = CapturePresentation()
     private init() {}
-    func start(root: URL, onCaptureSettings: @escaping () -> Void, onRecord: @escaping () -> Void) {
+    func start(root: URL, onCaptureSettings: @escaping () -> Void, onRecord: @escaping () -> Void,
+               onPause: @escaping () -> Void, onAutoRecord: @escaping () -> Void, onLive: @escaping (Bool) -> Void) {
         guard !Home.runsInsideTests, library == nil else { return }
         do {
             let libraryRoot = Home.current.url.appendingPathComponent("Library/Application Support/Jottie")
@@ -28,6 +30,9 @@ import JottieMCP
             let coordinator = try KnowledgeCoordinator(store: store, publisher: publisher)
             let model = LibraryViewModel(store: store, coordinator: coordinator, account: account, publisher: publisher)
             model.onCaptureSettings = onCaptureSettings; model.onRecord = onRecord
+            model.onPause = onPause; model.onAutoRecord = onAutoRecord; model.onLive = onLive
+            capture.liveEnabled = Config.liveTranscriptionEnabled()
+            model.capture = capture
             library = store; self.coordinator = coordinator; window = LibraryWindow(model: model); captureRoot = root
             let legacySummary = Config.raw()["summary"] as? [String: Any]
             let backend = legacySummary?["backend"] as? String
@@ -46,6 +51,44 @@ import JottieMCP
                 MainActor.assumeIsolated { self?.schedule() }
             }
         } catch { errorMessage = error.localizedDescription }
+    }
+    private func publishCapture() { window?.model.capture = capture }
+    func updateRecording(_ state: MenuBarController.State, elapsed: String?) {
+        capture.state = state == .idle ? .idle : state == .paused ? .paused : .recording
+        capture.elapsed = elapsed; publishCapture()
+    }
+    func updateAutoRecord(enabled: Bool, decision: String?) {
+        capture.autoRecord = enabled; capture.autoDecision = decision; publishCapture()
+    }
+    func updateLivePreference(enabled: Bool) { capture.liveEnabled = enabled; publishCapture() }
+    func updateConfigProblem(_ problem: String?) { capture.configProblem = problem; publishCapture() }
+    func updateTranscription(_ text: String?) { capture.transcription = text; publishCapture() }
+    func updateImport(_ update: MediaImportCoordinator.Update) {
+        capture.mediaImport = "Importing \(update.index) of \(update.total): \(update.source.lastPathComponent)"
+        publishCapture()
+    }
+    func finishImport(_ result: MediaImportCoordinator.Result) {
+        capture.mediaImport = nil; publishCapture()
+        window?.model.message = "Imported \(result.imported.count) recordings; \(result.duplicates.count) duplicates; \(result.failures.count) failed."
+    }
+    func updateLive(_ snapshot: LiveTranscriptionCoordinator.Snapshot) {
+        capture.liveEnabled = snapshot.isEnabled
+        switch snapshot.status {
+        case .idle: capture.liveStatus = "Live transcript"
+        case .paused: capture.liveStatus = "Live transcript paused"
+        case .loading: capture.liveStatus = "Loading live transcription"
+        case .live: capture.liveStatus = "Live transcript"
+        case .modelMissing: capture.liveStatus = "Live transcription model is missing"
+        case .overloaded: capture.liveStatus = "Live transcription stopped: Mac could not keep up"
+        case .error(let message): capture.liveStatus = "Live transcription stopped: " + message
+        }
+        capture.liveText = snapshot.entries.map { entry in
+            switch entry {
+            case .resumed: return "— Live transcript resumed —"
+            case .speech(let block): return "\(block.speaker.label): \(block.text)"
+            }
+        }.joined(separator: "\n\n")
+        publishCapture()
     }
     func schedule() {
         guard processing == nil, let store = library, let coordinator else { return }

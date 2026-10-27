@@ -18,11 +18,33 @@ import JottieKnowledge
     }
 }
 
+/// Capture presentation stays in the manager; the recording engine remains in its adapter.
+public struct CapturePresentation: Equatable {
+    public enum State { case idle, recording, paused }
+    public var state: State = .idle
+    public var elapsed: String?
+    public var autoRecord = false
+    public var autoDecision: String?
+    public var liveEnabled = false
+    public var liveStatus = ""
+    public var liveText = ""
+    public var transcription: String?
+    public var configProblem: String?
+    public var mediaImport: String?
+    public init() {}
+    public var isRecording: Bool { state != .idle }
+    public var label: String {
+        let name = state == .idle ? "Ready to record" : state == .paused ? "Recording paused" : "Recording"
+        return elapsed.map { "\(name) · \($0)" } ?? name
+    }
+}
+
 @MainActor public final class LibraryViewModel: ObservableObject {
     public let store: LibraryStore
     public let coordinator: KnowledgeCoordinator
     public let account: MicrosoftAccount
     public let publisher: GraphPublisher
+    @Published public var capture = CapturePresentation()
     @Published public var meetings: [Meeting] = []
     @Published public var hits: [SearchHit] = []
     @Published public var folders: [Folder] = []
@@ -53,6 +75,9 @@ import JottieKnowledge
     private var searchKey = ""
     public var onCaptureSettings: (() -> Void)?
     public var onRecord: (() -> Void)?
+    public var onPause: (() -> Void)?
+    public var onAutoRecord: (() -> Void)?
+    public var onLive: ((Bool) -> Void)?
     public init(store: LibraryStore, coordinator: KnowledgeCoordinator, account: MicrosoftAccount, publisher: GraphPublisher) {
         self.store = store; self.coordinator = coordinator; self.account = account; self.publisher = publisher
     }

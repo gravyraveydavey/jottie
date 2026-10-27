@@ -226,7 +226,6 @@ final class AppController {
     /// one, waiting for that to finish.
     private var pendingRoot: URL?
     private let menuBar = MenuBarController(visible: Config.menuBarIcon())
-    private let window = StatusWindow()
     /// Built on first use. It is thirty-odd controls, and jottie spends nearly
     /// all of its life recording rather than being configured.
     private lazy var settings: SettingsWindow = {
@@ -356,18 +355,6 @@ final class AppController {
         menuBar.update(state: .idle, elapsed: nil)
         menuBar.updatesAvailable(updates.isAvailable)
 
-        window.onToggle = { [weak self] in self?.toggle() }
-        window.onTogglePause = { [weak self] in self?.togglePause() }
-        window.onToggleAutoRecord = { [weak self] in self?.toggleAutoRecord() }
-        window.onToggleLive = { [weak self] enabled in self?.toggleLive(enabled) }
-        window.onOpenFolder = { [weak self] in self?.openFolder() }
-        window.onShowRecordings = { [weak self] in self?.showRecordings() }
-        window.onImportFiles = { [weak self] files in self?.importFiles(files) }
-        window.onCancelImport = { [weak self] in self?.cancelImport() }
-        window.onChooseImport = { [weak self] in self?.chooseMediaToImport() }
-        window.updateLivePreference(enabled: Config.liveTranscriptionEnabled())
-        if Config.showWindowAtLaunch(), !SetupState.isPending { window.show() }
-
         autoRecord.currentSession = { [weak self] in self?.session }
         autoRecord.startRecording = { [weak self] trigger, context in
             self?.startSession(trigger: trigger, context: context) ?? false
@@ -381,7 +368,7 @@ final class AppController {
         RecordingSession.recoverInterrupted(root: root)
 
         menuBar.updateAutoRecord(enabled: autoRecord.enabled, decision: nil)
-        window.updateAutoRecord(enabled: autoRecord.enabled, decision: nil)
+        JottieBridge.shared.updateAutoRecord(enabled: autoRecord.enabled, decision: nil)
 
         // Runs for the life of the daemon, not just while recording: the menu
         // also shows what the auto-record loop is thinking, and a status line
@@ -406,7 +393,10 @@ final class AppController {
             reason: "jottie watches for meetings and answers its command line")
 
         JottieBridge.shared.start(root: root, onCaptureSettings: { [weak self] in self?.showCaptureSettings() },
-                                  onRecord: { [weak self] in self?.toggleRecording() })
+                                  onRecord: { [weak self] in self?.toggleRecording() },
+                                  onPause: { [weak self] in self?.togglePause() },
+                                  onAutoRecord: { [weak self] in self?.toggleAutoRecord() },
+                                  onLive: { [weak self] enabled in self?.toggleLive(enabled) })
         offerSetup()
         settingsApplier = SettingsApplier(
             apply: { [weak self] change in self?.take(change) },
@@ -593,13 +583,13 @@ final class AppController {
     }
 
     private func showImport(_ update: MediaImportCoordinator.Update) {
-        window.updateImport(update)
-        recordings.updateImport(update)
+        JottieBridge.shared.updateImport(update)
+        if recordingsBuilt { recordings.updateImport(update) }
     }
 
     private func finishImport(_ result: MediaImportCoordinator.Result) {
-        window.finishImport(result)
-        recordings.finishImport(result)
+        JottieBridge.shared.finishImport(result)
+        if recordingsBuilt { recordings.finishImport(result) }
     }
 
     /// Stop any live session cleanly (finalizing files) and exit.
@@ -663,10 +653,10 @@ final class AppController {
     private func showAutoRecord() {
         let decision = autoRecord.enabled ? autoRecord.lastDecision : nil
         menuBar.updateAutoRecord(enabled: autoRecord.enabled, decision: decision)
-        window.updateAutoRecord(enabled: autoRecord.enabled, decision: decision)
+        JottieBridge.shared.updateAutoRecord(enabled: autoRecord.enabled, decision: decision)
     }
 
-    /// The status window's live-transcript switch. It only writes, as the
+    /// The meeting manager's live-transcript switch. It only writes, as the
     /// setup form's switch does; the recording is rewired by `take`, which
     /// hears both.
     private func toggleLive(_ enabled: Bool) {
@@ -678,7 +668,7 @@ final class AppController {
     private func take(_ change: SettingsApplier.Change) {
         switch change {
         case .liveTranscription(let enabled):
-            window.updateLivePreference(enabled: enabled)
+            JottieBridge.shared.updateLivePreference(enabled: enabled)
             rewireLive(enabled)
         case .icons:
             applyIconPreferences()
@@ -898,7 +888,7 @@ final class AppController {
     private func showConfigProblems() {
         let problems = Config.problems()
         menuBar.updateConfigProblem(problems.first?.headline)
-        window.updateConfigProblem(problems.first?.headline)
+        JottieBridge.shared.updateConfigProblem(problems.first?.headline)
 
         let unreadable = Config.unreadableReason != nil
         defer { configWasUnreadable = unreadable }
@@ -922,7 +912,7 @@ final class AppController {
     private func showTranscription(_ status: TranscriptionCoordinator.Status) {
         let text = Self.transcriptionLine(for: status)
         menuBar.updateTranscription(text)
-        window.updateTranscription(text)
+        JottieBridge.shared.updateTranscription(text)
         // Each change of status follows the end of a session's work — its
         // transcript, names and summary — or the start of the next, so the
         // recordings window reads again rather than going on offering
@@ -937,7 +927,7 @@ final class AppController {
     }
 
     private func showLive(_ snapshot: LiveTranscriptionCoordinator.Snapshot) {
-        window.updateLive(snapshot)
+        JottieBridge.shared.updateLive(snapshot)
         switch snapshot.status {
         case .overloaded, .error:
             // The coordinator has closed its queues; detach here as well so
@@ -948,11 +938,11 @@ final class AppController {
         }
     }
 
-    /// Bring the status window up — from the menu, a notification, or a
+    /// Bring the meeting manager up — from the menu, a notification, or a
     /// second launch of an already-running jottie. All three are someone
     /// asking for the window this second, so it comes forward rather than
     /// waiting behind whatever they were looking at.
-    func showWindow() { window.bringToFront() }
+    func showWindow() { showRecordings() }
 
     /// Settings, from either menu. Activating first because a click on the
     /// status item doesn't bring the app forward, and a settings window you
@@ -1002,28 +992,21 @@ final class AppController {
         onSetupAvailable?(available)
     }
 
-    /// The Dock icon: show the window, or put it away if jottie was already in
-    /// front and it's sitting there.
-    func toggleWindow(alreadyActive: Bool) {
-        if alreadyActive, window.isVisible {
-            window.hide()
-        } else {
-            window.show()
-        }
-    }
+    /// Dock reopens always reveal the same meeting manager, including when active.
+    func toggleWindow(alreadyActive: Bool) { showWindow() }
 
     /// Reflect state everywhere it's shown at once, so the three surfaces can
     /// never disagree about whether something is being recorded.
     private func present(_ state: MenuBarController.State, elapsed: String?) {
         menuBar.update(state: state, elapsed: elapsed)
-        window.update(state: state, elapsed: elapsed)
+        JottieBridge.shared.updateRecording(state, elapsed: elapsed)
         DockPresentation.update(state: state, elapsed: elapsed)
     }
 
     private func tick() {
         let decision = autoRecord.enabled ? autoRecord.lastDecision : nil
         menuBar.updateAutoRecord(enabled: autoRecord.enabled, decision: decision)
-        window.updateAutoRecord(enabled: autoRecord.enabled, decision: decision)
+        JottieBridge.shared.updateAutoRecord(enabled: autoRecord.enabled, decision: decision)
         guard let session else { return }
         present(
             session.isPaused ? .paused : .recording,
@@ -1051,7 +1034,7 @@ final class AppController {
         recordings.show()
     }
 
-    /// The elapsed time as the status window shows it. Not private and not
+    /// The elapsed time as the meeting manager shows it. Not private and not
     /// isolated because `jottie doctor` prints the same number from a command
     /// that never touches AppKit, and one shape for it is the point.
     nonisolated static func format(_ interval: TimeInterval) -> String {

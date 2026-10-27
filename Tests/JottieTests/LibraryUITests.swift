@@ -41,3 +41,24 @@ import JottieKnowledge
     try LibraryStore.directory(output)
     try image.write(to: output.appendingPathComponent("jottie-library.png"))
 }
+
+@Test @MainActor func managerReusesItsWindowAfterCloseAndReopen() throws {
+    let app = NSApplication.shared
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let store = try LibraryStore(root: root)
+    let model = LibraryViewModel(store: store, coordinator: try KnowledgeCoordinator(store: store),
+        account: MicrosoftAccount(), publisher: try GraphPublisher(tokens: MicrosoftAccount(), root: root))
+    let previous = Set(app.windows.map(ObjectIdentifier.init))
+    let manager = LibraryWindow(model: model)
+    defer { manager.closePreview() }
+    manager.show()
+    let created = app.windows.filter { !previous.contains(ObjectIdentifier($0)) && $0.title == "Jottie" }
+    #expect(created.count == 1)
+    manager.closePreview()
+    manager.show(); manager.show()
+    let reopened = app.windows.filter { !previous.contains(ObjectIdentifier($0)) && $0.title == "Jottie" }
+    #expect(reopened.count == 1)
+    #expect(reopened.first === created.first)
+    #expect(reopened.first?.isVisible == true)
+}

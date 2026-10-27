@@ -42,8 +42,10 @@ typealias ViewState<Value> = SwiftUI.State<Value>
     @ObservedObject var model: LibraryViewModel
     @ViewState private var editingFolder: Folder?
     @ViewState private var speakerSheet = false
+    @ViewState private var liveExpanded = false
     var body: some View {
         VStack(spacing: 0) {
+            captureBar
             NavigationSplitView { sidebar } content: { contentPane } detail: { detailPane }
             if let message = model.message {
                 HStack { Text(message).font(.callout); Spacer(); Button { model.message = nil } label: { Image(systemName: "xmark") }.help("Dismiss this message") }
@@ -68,7 +70,7 @@ typealias ViewState<Value> = SwiftUI.State<Value>
         .searchable(text: $model.query, prompt: "Search all meeting text")
         .toolbar {
             ToolbarItemGroup {
-                Button { model.onRecord?() } label: { Label("Record", systemImage: "record.circle") }
+                Button { model.onRecord?() } label: { Label(model.capture.isRecording ? "Stop recording" : "Record", systemImage: model.capture.isRecording ? "stop.circle.fill" : "record.circle") }
                     .help("Start or stop a meeting recording")
                 Button { model.importTranscripts() } label: { Label("Import", systemImage: "square.and.arrow.down") }.help("Import transcript folders, Markdown, text or Word documents")
                 Button { model.export() } label: { Label("Export Markdown", systemImage: "square.and.arrow.up") }.disabled(model.selection.isEmpty).help("Export selected meetings as Markdown")
@@ -95,6 +97,36 @@ typealias ViewState<Value> = SwiftUI.State<Value>
                 try? await Task.sleep(for: .seconds(5))
             }
         }
+    }
+
+    private var captureBar: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label(model.capture.label, systemImage: model.capture.isRecording ? "record.circle.fill" : "mic")
+                    .foregroundStyle(model.capture.isRecording ? .red : .secondary)
+                    .monospacedDigit()
+                if model.capture.isRecording {
+                    Button(model.capture.state == .paused ? "Resume" : "Pause") { model.onPause?() }
+                        .help("Pause or resume the current recording")
+                }
+                Spacer()
+                Toggle("Automatic recording", isOn: Binding(get: { model.capture.autoRecord }, set: { _ in model.onAutoRecord?() }))
+                    .help(model.capture.autoDecision ?? "Record automatically when a meeting is detected")
+                Toggle("Live transcript", isOn: Binding(get: { model.capture.liveEnabled }, set: { model.onLive?($0) }))
+                    .help("Show a live transcript here during recording")
+            }
+            if let problem = model.capture.configProblem { Text(problem).foregroundStyle(.red).font(.callout) }
+            if let text = model.capture.transcription { Text(text).font(.caption).foregroundStyle(.secondary) }
+            if let text = model.capture.mediaImport { Text(text).font(.caption).foregroundStyle(.secondary) }
+            if model.capture.liveEnabled && (model.capture.isRecording || !model.capture.liveText.isEmpty) {
+                DisclosureGroup(model.capture.liveStatus, isExpanded: $liveExpanded) {
+                    ScrollView {
+                        Text(model.capture.liveText.isEmpty ? "Waiting for speech…" : model.capture.liveText)
+                            .frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
+                    }.frame(maxHeight: 160)
+                }
+            }
+        }.padding(10).background(.quaternary)
     }
 
     private var sidebar: some View {
