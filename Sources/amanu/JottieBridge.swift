@@ -11,6 +11,8 @@ import JottieMCP
 @MainActor final class JottieBridge {
     static let shared = JottieBridge()
     private var library: LibraryStore?
+    private var nativeSettings: NativeCaptureSettings?
+    private var lastBambooAttempt = Date.distantPast
     private var coordinator: KnowledgeCoordinator?
     private var window: LibraryWindow?
     private var ticker: Timer?
@@ -31,6 +33,10 @@ import JottieMCP
             let model = LibraryViewModel(store: store, coordinator: coordinator, account: account, publisher: publisher)
             model.onCaptureSettings = onCaptureSettings; model.onRecord = onRecord
             model.onPause = onPause; model.onAutoRecord = onAutoRecord; model.onLive = onLive
+            let nativeSettings = NativeCaptureSettings(isBusy: { [weak model] in
+                model?.capture.isRecording == true || model?.capture.transcription != nil
+            })
+            self.nativeSettings = nativeSettings; model.captureSettings = nativeSettings.controller
             capture.liveEnabled = Config.liveTranscriptionEnabled()
             model.capture = capture
             library = store; self.coordinator = coordinator; window = LibraryWindow(model: model); captureRoot = root
@@ -95,18 +101,41 @@ import JottieMCP
         processing = Task {
             defer { processing = nil }
             do {
+                // Adopt legacy Trash/deletion records before scanning capture sources.
+                try await store.purgeTrash()
                 if let root = captureRoot {
                     for dir in SessionInventory.sessionFolders(in: root) {
                         guard FileManager.default.fileExists(atPath: dir.appendingPathComponent("transcript.json").path),
                               !TranscriptVersions.isRequested(dir) else { continue }
+                        guard try await store.shouldImportAmanu(dir) else { continue }
                         _ = try await store.importAmanu(dir)
                     }
                 }
+                await refreshBambooIfDue(store: store)
                 try await store.reconcile()
                 await coordinator.run()
                 await window?.model.reload()
             } catch { window?.model.message = error.localizedDescription }
         }
+    }
+    private func refreshBambooIfDue(store: LibraryStore) async {
+        guard Date().timeIntervalSince(lastBambooAttempt) >= 3600 else { return }
+        do {
+            let settings = try await store.settings()
+            guard settings.bambooEnabled, let company = try? BambooHR.company(settings.bambooCompany) else { return }
+            let directory = try PeopleDirectory(root: store.root)
+            let snapshot = try await directory.snapshot(company: company)
+            // Background networking starts only after an explicit successful directory connection.
+            guard let synced = snapshot.syncedAt, Date().timeIntervalSince(synced) >= 86400 else { return }
+            lastBambooAttempt = Date()
+            guard let key = try BambooKeychain.read(company: company) else { return }
+            let people = try await BambooHR.fetch(company: company, key: key)
+            // Re-check opt-in/company after the network request; settings may have changed meanwhile.
+            let current = try await store.settings()
+            guard current.bambooEnabled, (try? BambooHR.company(current.bambooCompany)) == company else { return }
+            try await directory.replace(people, company: company)
+            await window?.model.refreshBambooStatus()
+        } catch { window?.model.bambooStatus = "Automatic BambooHR refresh failed. The last successful directory is retained; use Sync directory to retry." }
     }
     func ingest(_ dir: URL) async {
         guard !Home.runsInsideTests else { return }
@@ -130,6 +159,9 @@ import JottieMCP
     }
     func showSettings() {
         if let window { window.showSettings() } else { show() }
+    }
+    func showRecordingSettings() {
+        showSettings(); window?.model.settingsTab = "Recording"
     }
     func stop() { ticker?.invalidate(); processing?.cancel() }
 }

@@ -60,6 +60,7 @@ typealias ViewState<Value> = SwiftUI.State<Value>
                     if model.capture.isRecording || model.capture.configProblem != nil || model.capture.transcription != nil || model.capture.mediaImport != nil { captureBar }
                     if model.location == "settings" { LibrarySettingsView(model: model) }
                     else if model.location == "queue" { QueuePane(model: model) }
+                    else if model.location == "trash" { TrashPane(model: model) }
                     else {
                         HStack(spacing: 0) {
                             MeetingListPane(model: model, editFolder: { editingFolder = $0 }).frame(width: listSize)
@@ -103,11 +104,9 @@ typealias ViewState<Value> = SwiftUI.State<Value>
                     sidebarHeading("Library")
                     navigationRow("All meetings", icon: "books.vertical", location: "all", count: model.meetings.count)
                         .dropDestination(for: String.self) { values, _ in model.drop(values, into: nil) }
-                    navigationRow("Import", icon: "tray", location: "inbox", count: model.meetings.filter { $0.folderID == nil }.count)
-                        .help("Unfiled recordings and imported transcripts")
-                        .dropDestination(for: String.self) { values, _ in model.drop(values, into: nil) }
                     navigationRow("Starred", icon: "star", location: "starred", count: model.meetings.filter { $0.starred == true }.count)
                     navigationRow("Queue", icon: "checklist", location: "queue", count: model.jobs.count)
+                    navigationRow("Trash", icon: "trash", location: "trash", count: model.trash.count)
                     sidebarHeading("Folders").padding(.top, 28)
                     ForEach(visibleFolders, id: \.folder.id) { item in folderRow(item.folder, depth: item.depth) }
                 }.padding(.horizontal, 12)
@@ -154,7 +153,10 @@ typealias ViewState<Value> = SwiftUI.State<Value>
     }
     private func folderRow(_ folder: Folder, depth: Int) -> some View {
         HStack(spacing: 0) {
-            if depth > 0 { Rectangle().fill(JottieStyle.border).frame(width: 1).padding(.leading, CGFloat(depth * 20 - 2)).padding(.trailing, 8) }
+            if depth > 0 {
+                Rectangle().fill(JottieStyle.border).frame(width: 1).padding(.leading, CGFloat(depth * 20 - 2))
+                    .overlay(alignment: .trailing) { Rectangle().fill(JottieStyle.border).frame(width: 10, height: 1).offset(x: 9) }
+            }
             Button { model.navigate(folder.id.uuidString) } label: {
                 HStack(spacing: 9) {
                     Image(systemName: model.location == folder.id.uuidString ? "folder.fill" : "folder").frame(width: 16)
@@ -197,7 +199,7 @@ typealias ViewState<Value> = SwiftUI.State<Value>
                     }
                 }.buttonStyle(JottieButtonStyle()).disabled(model.working || model.settingsDirty)
                     .help("Update missing summaries and summaries using an earlier prompt")
-                Button { model.importTranscripts() } label: { Label("Import", systemImage: "square.and.arrow.up") }
+                Button { model.importTranscripts() } label: { HStack(spacing: 6) { JottieImportIcon(); Text("Import") } }
                     .buttonStyle(JottieButtonStyle(kind: .outline)).help("Import transcript folders, Markdown, text or Word documents")
                 Button { model.onRecord?() } label: { Label(model.capture.isRecording ? "Stop recording" : "New recording", systemImage: model.capture.isRecording ? "stop.circle" : "mic") }
                     .buttonStyle(JottieButtonStyle(kind: .primary)).disabled(model.onRecord == nil)

@@ -48,3 +48,23 @@ Exact licence texts for these dependencies are included in Resources/Licenses an
 under the SIL Open Font License 1.1. Copyright 2024 The Geist Project Authors.
 The font files, exact source revision and full OFL notice are in the JottieUI
 resource bundle under `Fonts/` (`SOURCE.txt` and `OFL.txt`).
+
+## Lucide Import icon
+
+The user-supplied Lucide Import icon is rendered as native SwiftUI paths in `DesignSystem.swift`. Other interface icons use SF Symbols.
+
+ISC License
+
+Copyright (c) 2026 Lucide Icons and Contributors
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.

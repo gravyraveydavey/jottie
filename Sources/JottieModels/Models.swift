@@ -147,6 +147,7 @@ public struct Meeting: Codable, Sendable, Equatable, Identifiable {
     public var importedSummary: String?
     public var sourceMetadata: [String: String]?
     public var starred: Bool?
+    public var participantContext: [ParticipantIdentity]?
     public var speakerRoles: [String: String]?
     public init(id: UUID = UUID(), sourceID: String, title: String, startedAt: Date = Date(),
                 segments: [Segment], participants: [String] = [], speakerNames: [String: String] = [:]) {
@@ -285,6 +286,8 @@ public struct LibrarySettings: Codable, Sendable, Equatable {
     public var codexModel = ""
     public var codexEffort = ""
     public var selectedCalendarIDs: [String] = []
+    public var bambooCompany = ""
+    public var bambooEnabled = false
     public var microsoftClientID = ""
     public var microsoftTenantID = ""
     public init() {}
@@ -293,7 +296,7 @@ public struct LibrarySettings: Codable, Sendable, Equatable {
     public var contextRevision: String { Codec.hash(folderContextPrompt + "\n" + codexModel + "\n" + codexEffort + "\nsummary-only-v2") }
     enum CodingKeys: String, CodingKey {
         case schemaVersion, summaryPrompt, folderContextPrompt, refreshMinutes, analysisEnabled, codexPath,
-             codexModel, codexEffort, selectedCalendarIDs, microsoftClientID, microsoftTenantID
+             codexModel, codexEffort, selectedCalendarIDs, microsoftClientID, microsoftTenantID, bambooCompany, bambooEnabled
     }
     public init(from decoder: Decoder) throws {
         self.init()
@@ -308,6 +311,8 @@ public struct LibrarySettings: Codable, Sendable, Equatable {
         codexModel = try values.decodeIfPresent(String.self, forKey: .codexModel) ?? codexModel
         codexEffort = try values.decodeIfPresent(String.self, forKey: .codexEffort) ?? codexEffort
         selectedCalendarIDs = try values.decodeIfPresent([String].self, forKey: .selectedCalendarIDs) ?? []
+        bambooCompany = try values.decodeIfPresent(String.self, forKey: .bambooCompany) ?? ""
+        bambooEnabled = try values.decodeIfPresent(Bool.self, forKey: .bambooEnabled) ?? false
         microsoftClientID = try values.decodeIfPresent(String.self, forKey: .microsoftClientID) ?? ""
         microsoftTenantID = try values.decodeIfPresent(String.self, forKey: .microsoftTenantID) ?? ""
     }
@@ -371,4 +376,36 @@ public protocol FolderContextService: Sendable {
 }
 public protocol MeetingPublisher: Sendable {
     func publish(meeting: Meeting, to destination: PublishDestination) async throws
+}
+
+/// A calendar invite matched uniquely to the local directory. Never a confirmed speaker.
+public struct ParticipantIdentity: Codable, Sendable, Equatable {
+    public var invitee: String
+    public var employeeID: String
+    public var name: String
+    public var workEmail: String?
+    public var jobTitle: String?
+    public var company: String
+    public var matchedBy: String
+    public var syncedAt: Date
+    public init(invitee: String, employeeID: String, name: String, workEmail: String?, jobTitle: String?, company: String, matchedBy: String, syncedAt: Date) {
+        self.invitee = invitee; self.employeeID = employeeID; self.name = name; self.workEmail = workEmail
+        self.jobTitle = jobTitle; self.company = company; self.matchedBy = matchedBy; self.syncedAt = syncedAt
+    }
+}
+public struct DirectoryPerson: Codable, Sendable, Equatable, Identifiable {
+    public var id: String
+    public var name: String
+    public var workEmail: String?
+    public var jobTitle: String?
+    public init(id: String, name: String, workEmail: String? = nil, jobTitle: String? = nil) {
+        self.id = id; self.name = name; self.workEmail = workEmail; self.jobTitle = jobTitle
+    }
+}
+public struct TrashEntry: Sendable, Identifiable {
+    public var id: String
+    public var meeting: Meeting
+    public var trashedAt: Date
+    public init(id: String, meeting: Meeting, trashedAt: Date) { self.id = id; self.meeting = meeting; self.trashedAt = trashedAt }
+    public var expiresAt: Date { trashedAt.addingTimeInterval(48 * 60 * 60) }
 }

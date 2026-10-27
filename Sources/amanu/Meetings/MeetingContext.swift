@@ -25,6 +25,7 @@ struct MeetingContext {
     /// at the call rather than at everything the Mac plays.
     var appFamilies: [String] = []
     var attendees: [String] = []
+    var attendeeIdentities: [String] = []
     /// Conference link or location from the calendar event.
     var link: String?
     var scheduledStart: Date?
@@ -62,6 +63,7 @@ struct MeetingContext {
             scheduledStart: meeting?.start,
             scheduledEnd: meeting?.end
         )
+        attendeeIdentities = meeting?.attendeeIdentities ?? []
     }
 
     /// The part of a session folder's name that follows the timestamp, or nil
@@ -88,6 +90,7 @@ struct MeetingContext {
         var calendar: [String: Any] = [:]
         if let title { calendar["title"] = title }
         if !attendees.isEmpty { calendar["attendees"] = attendees }
+        if !attendeeIdentities.isEmpty { calendar["attendeeIdentities"] = attendeeIdentities }
         if let link { calendar["link"] = link }
         let iso = ISO8601DateFormatter()
         if let scheduledStart { calendar["scheduled_start"] = iso.string(from: scheduledStart) }

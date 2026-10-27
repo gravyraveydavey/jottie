@@ -6,7 +6,6 @@ import JottieKnowledge
 
 @MainActor struct LibrarySettingsView: View {
     @ObservedObject var model: LibraryViewModel
-    @ViewState private var tab = "Summary prompts"
     @ViewState private var preview = false
     var body: some View {
         ScrollView {
@@ -16,16 +15,20 @@ import JottieKnowledge
                     Text("Settings").font(JottieStyle.font(30, .semibold)).tracking(-0.7)
                     Text("Shape how Jottie brings your conversations together.").foregroundStyle(JottieStyle.muted)
                 }
-                HStack(spacing: 16) {
-                    ForEach([("Summary prompts", "text.alignleft"), ("General", "gearshape"), ("Calendars", "calendar"), ("Microsoft", "cloud"), ("MCP", "link")], id: \.0) { name, icon in
-                        DocumentTab(title: name, icon: icon, selected: tab == name) { tab = name }
+                HStack(spacing: 12) {
+                    ForEach([("General", "gearshape"), ("Summaries", "text.alignleft"), ("Recording", "mic"), ("Integrations", "link"), ("Microsoft", "cloud"), ("MCP", "network")], id: \.0) { name, icon in
+                        DocumentTab(title: name, icon: icon, selected: model.settingsTab == name) { model.settingsTab = name }
                     }
                 }
                 Group {
-                    switch tab {
-                    case "Summary prompts": prompts
+                    switch model.settingsTab {
+                    case "Summaries": prompts
                     case "General": general
-                    case "Calendars": calendars
+                    case "Recording":
+                        if let controller = model.captureSettings { CaptureSettingsPane(controller: controller) }
+                        else { Text("Recording controls are available in the full Jottie app. This library-only window does not run the capture engine.").foregroundStyle(JottieStyle.muted) }
+                    case "Integrations":
+                        VStack(alignment: .leading, spacing: 32) { calendars; JottieRule(); bamboo }
                     case "Microsoft": microsoft
                     default: mcp
                     }
@@ -41,9 +44,9 @@ import JottieKnowledge
                     Spacer()
                 }
             }.padding(.horizontal, 48).padding(.vertical, 40).frame(maxWidth: 900, alignment: .leading).frame(maxWidth: .infinity)
-        }.font(JottieStyle.font(14)).background(JottieStyle.background)
+        }.id(model.settingsTab).font(JottieStyle.font(14)).background(JottieStyle.background)
             .textFieldStyle(JottieInputStyle()).buttonStyle(JottieButtonStyle(kind: .outline))
-            .task { if model.codexStatus == nil { await model.checkCodex() } }
+            .task { if model.codexStatus == nil { await model.checkCodex() }; await model.refreshBambooStatus() }
     }
     private var prompts: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -135,7 +138,7 @@ import JottieKnowledge
                 Toggle("Record meetings automatically", isOn: Binding(get: { model.capture.autoRecord }, set: { _ in model.onAutoRecord?() })).toggleStyle(.switch).disabled(model.onAutoRecord == nil)
                 Toggle("Show live transcript while recording", isOn: Binding(get: { model.capture.liveEnabled }, set: { model.onLive?($0) })).toggleStyle(.switch).disabled(model.onLive == nil)
                 description(model.capture.autoDecision ?? "Audio is temporary and deleted after durable local transcription. Failed sessions keep their audio for recovery.")
-                Button("Recording and permission settings…") { model.onCaptureSettings?() }.disabled(model.onCaptureSettings == nil)
+                Button("Recording and permissions") { model.settingsTab = "Recording" }
             }
             JottieSection(title: "Appearance") {
                 Picker("Theme", selection: $model.appearance) { Text("System").tag("system"); Text("Light").tag("light"); Text("Dark").tag("dark") }.frame(maxWidth: 300)
@@ -154,6 +157,27 @@ import JottieKnowledge
                 })).toggleStyle(.checkbox).padding(.vertical, 4)
             }
             description("Changes apply to future recordings. Relaunch after enabling calendar integration in Recording settings.")
+        }
+    }
+    private var bamboo: some View {
+        JottieSection(title: "BambooHR directory", icon: "person.2") {
+            description("Match calendar invite names and work emails against your company directory. Job titles help frame meeting context; they never prove who spoke. Only names, work emails, employee IDs and job titles are cached locally.")
+            field("Company address", hint: "BambooHR requires your company subdomain as well as the API key, for example acme.bamboohr.com.") {
+                TextField("company.bamboohr.com", text: $model.settings.bambooCompany).disabled(model.syncingBamboo)
+                    .onChange(of: model.settings.bambooCompany) { _, _ in Task { await model.refreshBambooStatus() } }
+            }
+            field("API key", hint: "Stored in Jottie's Keychain after a successful sync. Leave blank to reuse the saved key for this company.") {
+                HStack(spacing: 10) {
+                    SecureField("API key or saved key", text: $model.bambooKey).disabled(model.syncingBamboo)
+                    Button { Task { await model.syncBamboo() } } label: {
+                        Label(model.syncingBamboo ? "Syncing…" : "Sync directory", systemImage: "arrow.triangle.2.circlepath")
+                    }.disabled(model.syncingBamboo || model.settings.bambooCompany.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            Toggle("Enrich meeting analysis with the local directory", isOn: $model.settings.bambooEnabled).toggleStyle(.switch).disabled(model.syncingBamboo)
+            description(model.bambooStatus)
+            description("After connecting, Jottie refreshes the directory daily while running. Sync directory fetches the latest directory now. Your key's BambooHR permissions determine which people and fields are visible. Existing summaries change only when explicitly regenerated.")
+            Button("Disconnect and remove local directory", role: .destructive) { Task { await model.disconnectBamboo() } }.disabled(model.syncingBamboo)
         }
     }
     private var microsoft: some View {

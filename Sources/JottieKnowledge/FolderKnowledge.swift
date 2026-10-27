@@ -203,7 +203,7 @@ public actor KnowledgeCoordinator {
         defer { busy = false }
         let settings = try await store.settings()
         guard settings.analysisEnabled else { throw JottieError.invalid("Enable Codex analysis in Library Settings.") }
-        let value = try await store.meeting(id)
+        let value = try await enrichedMeeting(id, settings: settings)
         let runner = CodexRunner(executable: settings.codexPath, model: settings.codexModel, effort: settings.codexEffort)
         let folders = try await store.folders()
         let tags = Self.existingTags(try await store.meetings())
@@ -212,12 +212,22 @@ public actor KnowledgeCoordinator {
         let revision = AnalysisRevision(transcriptRevision: value.transcriptRevision, promptRevision: settings.analysisRevision, analysis: output)
         try await store.apply(revision, to: id)
     }
+    private func enrichedMeeting(_ id: UUID, settings: LibrarySettings) async throws -> Meeting {
+        let value = try await store.meeting(id)
+        var context: [ParticipantIdentity] = []
+        if settings.bambooEnabled, let company = try? BambooHR.company(settings.bambooCompany) {
+            let directory = try PeopleDirectory(root: store.root)
+            context = try await directory.matching(value.participants, company: company)
+        }
+        return try await store.setParticipantContext(context, meetingID: id)
+    }
     private func analyse(_ meeting: Meeting, settings: LibrarySettings, folders: [Folder], using analyzer: any MeetingAnalyzer) async {
         let key = "analysis:\(meeting.id):\(meeting.transcriptRevision):\(settings.analysisRevision)"
         progressIDs.insert(key)
         do {
             guard try await ledger.begin(key, stage: "Meeting analysis") else { return }
-            let analysis = try await analyzer.analyze(meeting, prompt: settings.summaryPrompt, folders: folders)
+            let prepared = try await enrichedMeeting(meeting.id, settings: settings)
+            let analysis = try await analyzer.analyze(prepared, prompt: settings.summaryPrompt, folders: folders)
             try await store.apply(AnalysisRevision(transcriptRevision: meeting.transcriptRevision,
                 promptRevision: settings.analysisRevision, analysis: analysis), to: meeting.id)
             try await ledger.finish(key)

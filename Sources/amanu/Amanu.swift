@@ -952,8 +952,8 @@ final class AppController {
     }
 
     func showCaptureSettings() {
-        NSApp.activate(ignoringOtherApps: true)
-        settings.show()
+        if Home.runsInsideTests { NSApp.activate(ignoringOtherApps: true); settings.show() }
+        else { JottieBridge.shared.showRecordingSettings() }
     }
 
     /// About, from either menu. Activating for the same reason Settings

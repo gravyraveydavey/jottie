@@ -13,7 +13,7 @@ Native views use the existing repository and knowledge services. Colours, radii,
 | Prototype | Native implementation | Real behaviour |
 | --- | --- | --- |
 | `meeting-workspace.tsx` | `LibraryWindow.swift` | One manager, breadcrumb, update/import/record actions and recording status |
-| `library-sidebar.tsx` | `LibraryWindow.swift` | All meetings, Import, durable Starred, Queue, nested folders, collapse, drag/drop, theme and Settings |
+| `library-sidebar.tsx` | `LibraryWindow.swift` | All meetings, durable Starred, Queue, recoverable Trash, nested folders, collapse, drag/drop, theme and Settings |
 | `meeting-list.tsx` | `MeetingListPane.swift` | Date groups, summary cards, snippets, search, tag/date filtering, ascending/descending sort and pagination |
 | `meeting-detail.tsx` | `MeetingDetailPane.swift` | Summary, timestamped full transcript, editable speakers, copy, stars, regeneration and evidence links |
 | `folder-summary.tsx` | `FolderDetailPane.swift` | Real summary-only subtree context, freshness, updates, findings and source meetings |
@@ -26,14 +26,14 @@ The toolbar's Update summaries action explicitly regenerates summaries made with
 
 ## Deliberate differences and limits
 
-- The sidebar keeps **Import**, as requested in the preceding feedback, in place of the prototype's **Unfiled**. It contains unfiled records; the header's Import action opens the real transcript/document picker.
+- Import lives in the header. All meetings includes unfiled records; the sidebar now also includes a separate recoverable Trash collection.
 - Design-preview badges, sample-only status and simulated processing are omitted from the real app. Counts, dates, durations, sources and freshness reflect actual records. Transcript durations appear only when segment timestamps provide them; text-only imports do not invent durations.
 - The prototype's action checkboxes are represented by evidence-derived status indicators. They are not personal task-completion controls. Updating an action's completion manually would need a separate provenance contract so a click cannot be misrepresented as transcript evidence. This is a product/data-model difference, not a SwiftUI styling limitation.
 - The Queue displays real outstanding work and the current work-set progress. It does not display the prototype's fabricated completed-job history.
-- macOS window controls/title-bar space, file pickers, calendar/permission prompts, Microsoft authentication and recording/permissions settings retain their native presentation. The inherited permissions form is accessible from General settings. Replacing those OS-controlled surfaces is outside application styling.
-- SF Symbols substitute for Lucide glyphs; some strokes and silhouettes differ. The tag selector uses a custom SwiftUI list inside a native popover, so popover chrome and keyboard focus rendering differ from the browser. Other model/calendar/date pickers keep native accessibility and platform behaviour.
+- macOS window controls/title-bar space, file pickers, permission prompts and Microsoft authentication retain their native presentation. Capture settings are now custom components within the main window; OS-controlled permission dialogs remain outside application styling.
+- SF Symbols substitute for Lucide glyphs except the supplied Import paths; some strokes and silhouettes differ. The tag selector uses a custom SwiftUI list inside a native popover, so popover chrome and keyboard focus rendering differ from the browser. Other model/calendar/date pickers keep native accessibility and platform behaviour.
 - Text rasterisation, scrollbar visibility and menu animation depend on macOS. Matching CSS pixels cannot guarantee identical screenshots across display scales or accessibility settings. Desktop resizing is supported; the prototype's mobile/sidebar drawer flow is not a macOS pilot requirement.
-- Speaker job titles are entered manually. No team-directory/BambooHR connection is implied by the prototype or added here.
+- Speaker job titles can be entered manually. The subsequent BambooHR integration adds calendar-invite directory matches separately, preserving the distinction between an invitee and a confirmed speaker.
 
 None of these observations requires Electron to reproduce the primary desktop layout. A shared React runtime would become relevant if using the exact same web components and DOM behaviours across platforms becomes a requirement. That is a separate stack decision; capture, calendar, permissions, authentication and packaging would still need native adapters.
 
@@ -50,3 +50,5 @@ Automated coverage includes starred search across pagination and index rebuilds,
 - The committed arm64 application passed code-signature verification, packaged executable loading and the macOS 14.2 compatibility gate. `make app` replaced the canonical `.build/Jottie.app`; test fixture bundles are excluded from the app.
 - In the packaged application, Computer Use verified the 248-point sidebar and 360-point list, accessibility resizing to 264 points and persistence when returning from Settings, summary/transcript/speaker tabs, tag filtering, saving a synthetic speaker role, and evidence-popover links opening the cited transcript segment. Keyboard tag selection works by tabbing into the popover, moving with arrows, and pressing Return; Escape dismisses it.
 - UI QA used `jottie library --library /tmp/jottie-native-design-20261027`. No microphone capture or provider generation was invoked during those checks. Microsoft sign-in/publication and real recording permissions were not retested by this design pass. Synthetic preview windows do not save the normal app's frame or theme preferences.
+
+The next native UI pass adds Trash, the supplied inward-arrow Import icon, connected folder-tree branches and consolidated settings. See [directory, Trash and settings](bamboohr-and-trash.md) for behaviour and validation boundaries.

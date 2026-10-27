@@ -227,6 +227,14 @@ public actor LibraryStore: MeetingRepository {
             try commit(value)
         }
     }
+    public func setParticipantContext(_ context: [ParticipantIdentity], meetingID: UUID) throws -> Meeting {
+        try locked {
+            var value = try meeting(meetingID)
+            value.participantContext = context.isEmpty ? nil : context
+            try commit(value)
+            return value
+        }
+    }
     public func setSpeaker(_ label: String, name: String, meetingID: UUID) throws {
         try locked {
             var value = try meeting(meetingID)
@@ -252,11 +260,49 @@ public actor LibraryStore: MeetingRepository {
             try commit(value)
         }
     }
-    public func trash(_ ids: [UUID]) throws {
+    private struct TrashReceipt: Codable { var trashedAt: Date }
+    private func retiredSources() throws -> Set<String> {
+        let file = root.appendingPathComponent("retired-sources.json")
+        return FileManager.default.fileExists(atPath: file.path) ? try read(Set<String>.self, file) : []
+    }
+    public func shouldImportAmanu(_ directory: URL) throws -> Bool {
+        let sourceID = Codec.hash(directory.standardizedFileURL.path)
+        return try !retiredSources().contains(sourceID)
+    }
+    /// Old un-timestamped Trash gets a full grace period from first discovery.
+    private func trashItems(now: Date) throws -> [TrashEntry] {
+        let items = try FileManager.default.contentsOfDirectory(at: root.appendingPathComponent("Trash"), includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]).compactMap { directory -> TrashEntry? in
+            let file = directory.appendingPathComponent("meeting.json")
+            guard FileManager.default.fileExists(atPath: file.path) else { return nil }
+            let meeting = try read(Meeting.self, file)
+            let receipt = directory.appendingPathComponent("trash.json")
+            let timestamp: Date
+            if FileManager.default.fileExists(atPath: receipt.path) { timestamp = try read(TrashReceipt.self, receipt).trashedAt }
+            else { timestamp = now; if !readOnly { try write(TrashReceipt(trashedAt: now), receipt) } }
+            return TrashEntry(id: directory.lastPathComponent, meeting: meeting, trashedAt: timestamp)
+        }.sorted { $0.trashedAt > $1.trashedAt }
+        if !readOnly {
+            let prior = try retiredSources()
+            let updated = prior.union(items.map { $0.meeting.sourceID })
+            if prior != updated { try write(updated, root.appendingPathComponent("retired-sources.json")) }
+        }
+        return items
+    }
+    public func trashEntries(now: Date = Date()) throws -> [TrashEntry] {
+        if readOnly { return try trashItems(now: now) }
+        return try locked { try trashItems(now: now) }
+    }
+    public func trash(_ ids: [UUID], now: Date = Date()) throws {
         try locked {
-            for id in ids {
-                try FileManager.default.moveItem(at: meetingDirectory(id),
-                    to: root.appendingPathComponent("Trash/\(id.uuidString)-\(UUID().uuidString)"))
+            for id in Set(ids) {
+                let value = try meeting(id)
+                // Prevent the capture scanner from resurrecting a deleted source, even after expiry.
+                var retired = try retiredSources(); retired.insert(value.sourceID)
+                try write(retired, root.appendingPathComponent("retired-sources.json"))
+                let destination = root.appendingPathComponent("Trash/\(id.uuidString)-\(UUID().uuidString)")
+                try write(TrashReceipt(trashedAt: now), meetingDirectory(id).appendingPathComponent("trash.json"))
+                try FileManager.default.moveItem(at: meetingDirectory(id), to: destination)
                 try index?.write { db in
                     try db.execute(sql: "DELETE FROM meeting_search WHERE id = ?", arguments: [id.uuidString])
                     try db.execute(sql: "DELETE FROM meeting_catalog WHERE id = ?", arguments: [id.uuidString])
@@ -264,6 +310,31 @@ public actor LibraryStore: MeetingRepository {
                     try db.execute(sql: "DELETE FROM action_catalog WHERE meetingID = ?", arguments: [id.uuidString])
                 }
             }
+        }
+    }
+    public func restoreTrash(_ entryID: String) throws {
+        try locked {
+            guard let item = try trashItems(now: Date()).first(where: { $0.id == entryID }) else { throw JottieError.invalid("Trash item no longer exists.") }
+            let destination = meetingDirectory(item.meeting.id)
+            guard !FileManager.default.fileExists(atPath: destination.path) else { throw JottieError.conflict("A meeting with this ID already exists.") }
+            var meeting = item.meeting
+            if let folderID = meeting.folderID, try !folders().contains(where: { $0.id == folderID }) { meeting.folderID = nil }
+            try FileManager.default.moveItem(at: root.appendingPathComponent("Trash").appendingPathComponent(item.id), to: destination)
+            try commit(meeting)
+            var retired = try retiredSources(); retired.remove(meeting.sourceID)
+            try write(retired, root.appendingPathComponent("retired-sources.json"))
+        }
+    }
+    /// Called at launch and while running. Never touches publication receipts or remote copies.
+    @discardableResult public func purgeTrash(now: Date = Date(), emptyAll: Bool = false) throws -> Int {
+        try locked {
+            let expired = try trashItems(now: now).filter { emptyAll || $0.expiresAt <= now }
+            for item in expired {
+                var retired = try retiredSources(); retired.insert(item.meeting.sourceID)
+                try write(retired, root.appendingPathComponent("retired-sources.json"))
+                try FileManager.default.removeItem(at: root.appendingPathComponent("Trash").appendingPathComponent(item.id))
+            }
+            return expired.count
         }
     }
     private func updateIndex(_ meeting: Meeting) throws {
@@ -467,13 +538,14 @@ public actor LibraryStore: MeetingRepository {
         let meta = try JSONSerialization.jsonObject(with: metaData) as? [String: Any] ?? [:]
         let calendar = meta["calendar"] as? [String: Any] ?? [:]
         let sourceID = Codec.hash(directory.standardizedFileURL.path)
+        guard try !retiredSources().contains(sourceID) else { throw JottieError.conflict("This source is in Jottie Trash or was deleted.") }
         let started = (meta["started"] as? String).flatMap { ISO8601DateFormatter().date(from: $0) } ?? Date(timeIntervalSince1970: 0)
         let parts = source.segments.enumerated().map {
             Segment(id: "s\($0.offset + 1)", speaker: $0.element.speaker, startMS: $0.element.start_ms,
                     endMS: $0.element.end_ms, text: $0.element.text)
         }
         var value = Meeting(sourceID: sourceID, title: meta["title"] as? String ?? calendar["title"] as? String ?? directory.lastPathComponent,
-                            startedAt: started, segments: parts, participants: calendar["attendees"] as? [String] ?? [])
+                            startedAt: started, segments: parts, participants: calendar["attendeeIdentities"] as? [String] ?? calendar["attendees"] as? [String] ?? [])
         value.sourceMetadata = ["engine": source.engine, "model": source.model, "createdAt": source.created_at,
                                 "recordingApp": meta["app"] as? String, "trigger": meta["trigger"] as? String,
                                 "transcriptSHA256": Codec.hash(data)].compactMapValues { $0 }
@@ -486,6 +558,7 @@ public actor LibraryStore: MeetingRepository {
             value.speakerNames = speakers.compactMapValues { $0["name"] as? String }
         }
         return try locked {
+            guard try !retiredSources().contains(sourceID) else { throw JottieError.conflict("This source is in Jottie Trash or was deleted.") }
             func keepOriginal(_ id: UUID) throws {
                 let history = meetingDirectory(id).appendingPathComponent("SourceTranscriptHistory")
                 try Self.directory(history)

@@ -166,3 +166,21 @@ struct JottieDivider: View {
             .help("Drag to resize; double-click to reset")
     }
 }
+
+/// Native rendering of the supplied Lucide import paths (24×24 view box).
+struct JottieImportIcon: View {
+    var body: some View {
+        GeometryReader { geometry in
+            Path { path in
+                path.move(to: CGPoint(x:12,y:3)); path.addLine(to: CGPoint(x:12,y:15))
+                path.move(to: CGPoint(x:8,y:11)); path.addLine(to: CGPoint(x:12,y:15)); path.addLine(to: CGPoint(x:16,y:11))
+                path.move(to: CGPoint(x:8,y:5)); path.addLine(to: CGPoint(x:4,y:5))
+                path.addQuadCurve(to: CGPoint(x:2,y:7), control: CGPoint(x:2,y:5))
+                path.addLine(to: CGPoint(x:2,y:17)); path.addQuadCurve(to: CGPoint(x:4,y:19), control: CGPoint(x:2,y:19))
+                path.addLine(to: CGPoint(x:20,y:19)); path.addQuadCurve(to: CGPoint(x:22,y:17), control: CGPoint(x:22,y:19))
+                path.addLine(to: CGPoint(x:22,y:7)); path.addQuadCurve(to: CGPoint(x:20,y:5), control: CGPoint(x:22,y:5)); path.addLine(to: CGPoint(x:16,y:5))
+            }.applying(CGAffineTransform(scaleX: geometry.size.width / 24, y: geometry.size.height / 24))
+                .stroke(style: StrokeStyle(lineWidth: geometry.size.width / 12, lineCap: .round, lineJoin: .round))
+        }.frame(width: 16, height: 16).accessibilityHidden(true)
+    }
+}

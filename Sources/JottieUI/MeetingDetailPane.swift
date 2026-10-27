@@ -203,6 +203,18 @@ private struct EvidenceLinks: View {
                 Text("Give each detected voice a name and job title. Names also appear in the transcript. A shared remote channel may contain several people.")
                     .font(JottieStyle.font(13)).foregroundStyle(JottieStyle.muted).lineSpacing(7)
             }
+            if let identities = meeting.participantContext, !identities.isEmpty {
+                JottieSection(title: "Calendar invitees · BambooHR matches") {
+                    ForEach(Array(identities.enumerated()), id: \.offset) { _, person in
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(person.name + (person.jobTitle.map { " · " + $0 } ?? "")).font(JottieStyle.font(13, .medium))
+                            Text("Matched by " + person.matchedBy + " · Directory synced " + person.syncedAt.formatted(date: .abbreviated, time: .omitted))
+                                .font(JottieStyle.font(11)).foregroundStyle(JottieStyle.muted)
+                        }
+                    }
+                    Text("An invitation does not confirm attendance or identify a speaker channel.").font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted)
+                }
+            }
             ForEach(meeting.speakerLabels, id: \.self) { label in
                 VStack(alignment: .leading, spacing: 16) {
                     Label(label, systemImage: "person.2").font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted)
@@ -229,7 +241,7 @@ private struct EvidenceLinks: View {
                     .buttonStyle(JottieButtonStyle(kind: .primary))
                 Text(saved ? "Speaker details saved." : "Changes apply to this meeting.").font(JottieStyle.font(11)).foregroundStyle(JottieStyle.muted)
             }
-            Text("Source utterances stay unchanged. Regenerate analysis to apply corrected names to a new summary. Job titles are manual meeting metadata; no directory is connected.").font(JottieStyle.font(11)).foregroundStyle(JottieStyle.muted).lineSpacing(5)
+            Text("Source utterances stay unchanged. Regenerate analysis to apply corrected names to a new summary. Directory matches are invitee context, not verified speakers. Use a candidate only when the transcript identifies the voice.").font(JottieStyle.font(11)).foregroundStyle(JottieStyle.muted).lineSpacing(5)
         }.onAppear { names = meeting.speakerNames; roles = meeting.speakerRoles ?? [:] }
     }
     private func speakerField(_ title: String, label: String, values: Binding<[String: String]>) -> some View {

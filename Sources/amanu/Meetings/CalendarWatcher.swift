@@ -18,6 +18,7 @@ final class CalendarWatcher {
         let start: Date
         let end: Date
         let attendees: [String]
+        var attendeeIdentities: [String] = []
         /// Conference link or location, whichever the event carries — kept so
         /// the recording folder can say where the call actually happened.
         let link: String?
@@ -114,6 +115,10 @@ final class CalendarWatcher {
             start: event.startDate,
             end: event.endDate,
             attendees: attendees,
+            attendeeIdentities: (event.attendees ?? []).map { participant in
+                let email = participant.url.absoluteString.replacingOccurrences(of: "mailto:", with: "")
+                return participant.name.map { "\($0) <\(email)>" } ?? email
+            },
             link: link,
             // Self counts as an attendee, so "other people" means more than one.
             looksLikeCall: attendees.count > 1

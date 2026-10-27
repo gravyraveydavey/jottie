@@ -46,6 +46,11 @@ public struct CapturePresentation: Equatable {
     public let publisher: GraphPublisher
     @Published public var capture = CapturePresentation()
     @Published public var meetings: [Meeting] = []
+    @Published public var trash: [TrashEntry] = []
+    @Published public var bambooStatus = "Not connected"
+    @Published public var syncingBamboo = false
+    @Published public var bambooKey = ""
+    public var captureSettings: CaptureSettingsController?
     @Published public var hits: [SearchHit] = []
     @Published public var folders: [Folder] = []
     @Published public var contexts: [UUID: FolderContext] = [:]
@@ -59,6 +64,7 @@ public struct CapturePresentation: Equatable {
     }
     @Published public var savedSettings = LibrarySettings()
     @Published public var location = "all"
+    @Published public var settingsTab = "General"
     @Published public var query = ""
     @Published public var tag = ""
     @Published public var filterDates = false
@@ -95,7 +101,7 @@ public struct CapturePresentation: Equatable {
         return hits.first { selection.contains($0.id) }?.meeting ?? meetings.first { selection.contains($0.id) }
     }
     public var locationTitle: String {
-        selectedFolder?.name ?? ["all": "All meetings", "inbox": "Import", "starred": "Starred", "queue": "Queue", "settings": "Settings"][location] ?? "Meetings"
+        selectedFolder?.name ?? ["all": "All meetings", "inbox": "Import", "starred": "Starred", "queue": "Queue", "trash": "Trash", "settings": "Settings"][location] ?? "Meetings"
     }
     public var colorScheme: ColorScheme? { appearance == "system" ? nil : appearance == "dark" ? .dark : .light }
     public var settingsDirty: Bool { settings != savedSettings }
@@ -163,6 +169,8 @@ public struct CapturePresentation: Equatable {
     }
     public func reload() async {
         do {
+            try await store.purgeTrash()
+            trash = try await store.trashEntries()
             meetings = try await store.meetings(); folders = try await store.folders()
             if !loadedSettings {
                 settings = try await store.settings(); savedSettings = settings
@@ -177,6 +185,7 @@ public struct CapturePresentation: Equatable {
     }
     public func search() async {
         do {
+            guard !["trash", "settings", "queue"].contains(location) else { hits = []; hasMore = false; return }
             var search = SearchQuery()
             search.text = query; search.folderID = selectedFolder?.id; search.inbox = location == "inbox"
             search.starredOnly = location == "starred"; search.oldestFirst = oldestFirst
@@ -207,6 +216,7 @@ public struct CapturePresentation: Equatable {
     @discardableResult public func saveSettings(processPending: Bool = true) async -> Bool {
         do {
             settings.codexModel = settings.codexModel.trimmingCharacters(in: .whitespacesAndNewlines)
+            if settings.bambooEnabled { settings.bambooCompany = try BambooHR.company(settings.bambooCompany) }
             try await store.saveSettings(settings); savedSettings = settings
             message = "Settings saved. Existing analyses are unchanged."
             if processPending { Task { await coordinator.run(); await reload() } }
@@ -307,13 +317,59 @@ public struct CapturePresentation: Equatable {
     public func trashSelection() {
         let alert = NSAlert()
         alert.messageText = "Move \(selection.count) meeting(s) to Jottie Trash?"
-        alert.informativeText = "Records remain in Jottie's local Trash. Published copies are retained."
+        alert.informativeText = "Records can be restored for 48 hours, then are deleted when Jottie is running. Published copies are retained."
         alert.addButton(withTitle: "Move to Trash"); alert.addButton(withTitle: "Cancel")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         Task {
             do { try await store.trash(Array(selection)); selection = []; await reload() }
             catch { message = error.localizedDescription }
         }
+    }
+    public func restoreTrash(_ item: TrashEntry) async {
+        do { try await store.restoreTrash(item.id); await reload(); message = "Meeting restored." }
+        catch { message = error.localizedDescription }
+    }
+    public func emptyTrash() async {
+        do { let count = try await store.purgeTrash(emptyAll: true); await reload(); message = "Deleted \(count) meetings from Trash." }
+        catch { message = error.localizedDescription }
+    }
+    public func refreshBambooStatus() async {
+        guard let company = try? BambooHR.company(settings.bambooCompany) else { bambooStatus = "Enter a company address to connect."; return }
+        do {
+            let directory = try PeopleDirectory(root: store.root)
+            let snapshot = try await directory.snapshot(company: company)
+            guard (try? BambooHR.company(settings.bambooCompany)) == company else { return }
+            bambooStatus = snapshot.syncedAt.map { "\(snapshot.people.count) people · Last synced \($0.formatted(date: .abbreviated, time: .shortened))" } ?? "Not synced yet"
+        } catch { bambooStatus = error.localizedDescription }
+    }
+    public func syncBamboo() async {
+        guard !syncingBamboo else { return }
+        syncingBamboo = true; defer { syncingBamboo = false }
+        do {
+            let company = try BambooHR.company(settings.bambooCompany)
+            let key = bambooKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            let secret = try key.isEmpty ? BambooKeychain.read(company: company) : key
+            guard let secret, !secret.isEmpty else { throw JottieError.invalid("Enter a BambooHR API key first.") }
+            let people = try await BambooHR.fetch(company: company, key: secret)
+            guard (try? BambooHR.company(settings.bambooCompany)) == company else { throw JottieError.conflict("Company changed during sync. Retry for the selected company.") }
+            // Commit only after a complete successful fetch. A failure keeps the previous cache intact.
+            try BambooKeychain.save(secret, company: company)
+            bambooKey = ""
+            let directory = try PeopleDirectory(root: store.root)
+            try await directory.replace(people, company: company)
+            settings.bambooCompany = company; settings.bambooEnabled = true
+            guard await saveSettings(processPending: false) else { return }
+            await refreshBambooStatus()
+            message = "BambooHR directory synced. Names and job titles will enrich new analysis and explicit regenerations."
+        } catch { bambooStatus = error is JottieError ? error.localizedDescription : "Could not connect to BambooHR. Check your connection and try again." }
+    }
+    public func disconnectBamboo() async {
+        do {
+            if let company = try? BambooHR.company(settings.bambooCompany) { try BambooKeychain.remove(company: company) }
+            let directory = try PeopleDirectory(root: store.root); try await directory.clear()
+            settings.bambooEnabled = false; bambooKey = ""
+            _ = await saveSettings(processPending: false); await refreshBambooStatus()
+        } catch { message = error.localizedDescription }
     }
     public func signIn() async {
         do {
