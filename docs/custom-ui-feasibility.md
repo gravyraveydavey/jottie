@@ -1,6 +1,6 @@
 # Custom Jottie interface: feasibility and scope
 
-Status: feasibility assessment only. No custom visual redesign is implemented by this note.
+Status: the first native implementation now follows the supplied React prototype on `codex/native-ui-design`. See [Native interface implementation](native-ui-design.md) for component mappings, verification and remaining differences. The estimates below describe the original scope assessment.
 
 ## Recommendation
 

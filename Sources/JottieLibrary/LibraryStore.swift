@@ -205,6 +205,28 @@ public actor LibraryStore: MeetingRepository {
             }
         }
     }
+    public func setStarred(_ starred: Bool, meetingID: UUID) throws {
+        try locked {
+            var value = try meeting(meetingID)
+            value.starred = starred
+            try commit(value)
+        }
+    }
+    public func setSpeakers(names: [String: String], roles: [String: String], meetingID: UUID) throws {
+        try locked {
+            var value = try meeting(meetingID)
+            let labels = Set(value.segments.map(\.speaker))
+            guard Set(names.keys).isSubset(of: labels), Set(roles.keys).isSubset(of: labels) else {
+                throw JottieError.invalid("Unknown speaker.")
+            }
+            for (label, name) in names {
+                let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                value.speakerNames[label] = trimmed.isEmpty ? nil : trimmed
+            }
+            value.speakerRoles = roles.mapValues { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            try commit(value)
+        }
+    }
     public func setSpeaker(_ label: String, name: String, meetingID: UUID) throws {
         try locked {
             var value = try meeting(meetingID)
@@ -332,6 +354,8 @@ public actor LibraryStore: MeetingRepository {
     public func search(_ query: SearchQuery) throws -> [SearchHit] {
         let allFolders = try folders()
         let ids = query.folderID.map { query.includeDescendants ? Self.descendants($0, in: allFolders) : [$0] }
+        let starredIDs = query.starredOnly ? try meetings().filter { $0.starred == true }.map(\.id.uuidString) : []
+        if query.starredOnly && starredIDs.isEmpty { return [] }
         let terms = query.text.split(whereSeparator: \.isWhitespace).map(String.init)
         let fingerprint = try projectionFingerprint()
         let projected = try? index?.read { db in try String.fetchOne(db, sql: "SELECT value FROM projection_meta WHERE key='revision'") }
@@ -346,6 +370,10 @@ public actor LibraryStore: MeetingRepository {
                     arguments.append(terms.map { "\"" + $0.replacingOccurrences(of: "\"", with: "\"\"") + "\"" }.joined(separator: " AND ").databaseValue)
                 }
                 if query.inbox { predicates.append("m.folderID IS NULL") }
+                if query.starredOnly {
+                    predicates.append("m.id IN (\(Array(repeating: "?", count: starredIDs.count).joined(separator: ",")))")
+                    arguments += starredIDs.map(\.databaseValue)
+                }
                 if let ids {
                     let values = ids.map(\.uuidString).sorted()
                     predicates.append("m.folderID IN (\(Array(repeating: "?", count: values.count).joined(separator: ",")))")
@@ -358,7 +386,7 @@ public actor LibraryStore: MeetingRepository {
                 if let after = query.after { predicates.append("m.started >= ?"); arguments.append(after.timeIntervalSince1970.databaseValue) }
                 if let before = query.before { predicates.append("m.started <= ?"); arguments.append(before.timeIntervalSince1970.databaseValue) }
                 if !predicates.isEmpty { sql += " WHERE " + predicates.joined(separator: " AND ") }
-                sql += " ORDER BY m.started DESC,m.id LIMIT ? OFFSET ?"
+                sql += " ORDER BY m.started " + (query.oldestFirst ? "ASC" : "DESC") + ",m.id LIMIT ? OFFSET ?"
                 arguments += [min(100, max(1, query.limit)).databaseValue, max(0, query.offset).databaseValue]
                 let statement = sql, bindings = StatementArguments(arguments)
                 let result = try index.read { db in try Row.fetchAll(db, sql: statement, arguments: bindings) }
@@ -374,13 +402,17 @@ public actor LibraryStore: MeetingRepository {
         }
         let matches = try meetings().filter { meeting in
             if query.inbox && meeting.folderID != nil { return false }
+            if query.starredOnly && meeting.starred != true { return false }
             if let ids, !ids.contains(meeting.folderID ?? UUID()) { return false }
             if let tag = query.tag, !(meeting.analysis?.analysis.tags ?? []).contains(where: { Self.normalise($0) == Self.normalise(tag) }) { return false }
             if let after = query.after, meeting.startedAt < after { return false }
             if let before = query.before, meeting.startedAt > before { return false }
             return terms.allSatisfy { meeting.markdown.localizedStandardContains($0) }
         }
-        return matches.dropFirst(max(0, query.offset)).prefix(min(100, max(1, query.limit))).map {
+        return matches.sorted {
+            if $0.startedAt == $1.startedAt { return $0.id.uuidString < $1.id.uuidString }
+            return query.oldestFirst ? $0.startedAt < $1.startedAt : $0.startedAt > $1.startedAt
+        }.dropFirst(max(0, query.offset)).prefix(min(100, max(1, query.limit))).map {
             SearchHit(meeting: $0, snippet: String(($0.analysis?.analysis.summary ?? $0.importedSummary ?? $0.transcript).prefix(240)))
         }
     }

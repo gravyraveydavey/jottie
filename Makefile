@@ -130,6 +130,7 @@ app: build $(ICON)
 	@cp $(BUILT_ICON)/Amanu.icns $(STAGED_APP)/Contents/Resources/Jottie.icns
 	@if [ -f $(BUILT_ICON)/Assets.car ]; then cp $(BUILT_ICON)/Assets.car $(STAGED_APP)/Contents/Resources/Assets.car; fi
 	@for resource in $$(dirname "$(BUILT)")/*.bundle; do \
+		case "$$resource" in *_JottieTests.bundle) continue ;; esac; \
 		[ ! -d "$$resource" ] || cp -R "$$resource" $(STAGED_APP)/Contents/Resources/; done
 	@mkdir -p $(STAGED_APP)/Contents/Resources/Licenses
 	@cp Resources/Licenses/* $(STAGED_APP)/Contents/Resources/Licenses/

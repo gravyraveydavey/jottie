@@ -41,3 +41,10 @@ The inference implementation and model are otherwise the pinned upstream work.
 | swift-nio | 2.104.0 | Apache 2.0 with Runtime Library Exception |
 
 Exact licence texts for these dependencies are included in Resources/Licenses and copied into the application bundle. The upstream Amanu and Quill copyright notices remain intact.
+
+## Native interface typography
+
+[Geist and Geist Mono](https://github.com/vercel/geist-font) are bundled unmodified
+under the SIL Open Font License 1.1. Copyright 2024 The Geist Project Authors.
+The font files, exact source revision and full OFL notice are in the JottieUI
+resource bundle under `Fonts/` (`SOURCE.txt` and `OFL.txt`).

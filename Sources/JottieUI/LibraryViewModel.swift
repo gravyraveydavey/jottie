@@ -52,6 +52,12 @@ public struct CapturePresentation: Equatable {
     @Published public var jobs: [WorkStatus] = []
     @Published public var progress = ProcessingProgress()
     @Published public var selection = Set<UUID>()
+    @Published public var focusedMeetingID: UUID?
+    @Published public var oldestFirst = false
+    @Published public var appearance = UserDefaults.standard.string(forKey: "jottie.appearance") ?? "system" {
+        didSet { if persistPresentation { UserDefaults.standard.set(appearance, forKey: "jottie.appearance") } }
+    }
+    @Published public var savedSettings = LibrarySettings()
     @Published public var location = "all"
     @Published public var query = ""
     @Published public var tag = ""
@@ -64,15 +70,16 @@ public struct CapturePresentation: Equatable {
     @Published public var working = false
     @Published public var hasMore = false
     @Published public var accountID = ""
-    @Published public var settingsOpen = false
     @Published public var codexStatus: CodexInstallation.Status?
     @Published public var codexModels: [CodexInstallation.ModelChoice] = []
     @Published public var checkingCodex = false
     @Published public var testingCodex = false
     @Published public var codexTestMessage: String?
+    private let persistPresentation: Bool
     private var loadedSettings = false
     private var requestedPages = 1
     private var searchKey = ""
+    private var autoSelectNextSearch = true
     public var onCaptureSettings: (() -> Void)?
     public var onRecord: (() -> Void)?
     public var onPause: (() -> Void)?
@@ -80,9 +87,71 @@ public struct CapturePresentation: Equatable {
     public var onLive: ((Bool) -> Void)?
     public init(store: LibraryStore, coordinator: KnowledgeCoordinator, account: MicrosoftAccount, publisher: GraphPublisher) {
         self.store = store; self.coordinator = coordinator; self.account = account; self.publisher = publisher
+        persistPresentation = store.root.standardizedFileURL == LibraryStore.defaultRoot.standardizedFileURL
     }
     public var selectedFolder: Folder? { folders.first { $0.id.uuidString == location } }
-    public var selectedMeeting: Meeting? { meetings.first { selection.contains($0.id) } }
+    public var selectedMeeting: Meeting? {
+        if let focusedMeetingID, selection.contains(focusedMeetingID) { return meetings.first { $0.id == focusedMeetingID } }
+        return hits.first { selection.contains($0.id) }?.meeting ?? meetings.first { selection.contains($0.id) }
+    }
+    public var locationTitle: String {
+        selectedFolder?.name ?? ["all": "All meetings", "inbox": "Import", "starred": "Starred", "queue": "Queue", "settings": "Settings"][location] ?? "Meetings"
+    }
+    public var colorScheme: ColorScheme? { appearance == "system" ? nil : appearance == "dark" ? .dark : .light }
+    public var settingsDirty: Bool { settings != savedSettings }
+    public var outdatedMeetings: [Meeting] { meetings.filter { $0.analysis?.promptRevision != savedSettings.analysisRevision } }
+    public var staleFolders: [Folder] {
+        folders.filter { folder in
+            let ids = LibraryStore.descendants(folder.id, in: folders)
+            return meetings.contains { $0.folderID.map(ids.contains) == true } && contexts[folder.id]?.inputRevision != LibraryStore.contextFingerprint(folder: folder, folders: folders, meetings: meetings, settings: savedSettings)
+        }
+    }
+    public var updateCount: Int { outdatedMeetings.count + staleFolders.count }
+    public func folderMeetings(_ folder: Folder) -> [Meeting] {
+        let ids = LibraryStore.descendants(folder.id, in: folders)
+        return meetings.filter { $0.folderID.map(ids.contains) == true }
+    }
+    public func navigate(_ destination: String) {
+        location = destination; query = ""; tag = ""; selection = []; focusedMeetingID = nil
+        autoSelectNextSearch = ["all", "inbox", "starred"].contains(destination)
+        Task { await search() }
+    }
+    public func select(_ id: UUID, extending: Bool = false, range: Bool = false) {
+        if range, let anchor = focusedMeetingID, let a = hits.firstIndex(where: { $0.id == anchor }), let b = hits.firstIndex(where: { $0.id == id }) {
+            selection.formUnion(hits[min(a,b)...max(a,b)].map(\.id))
+        } else if extending {
+            if selection.contains(id) { selection.remove(id) } else { selection.insert(id) }
+        } else { selection = [id] }
+        focusedMeetingID = id
+    }
+    public func selectAdjacent(_ delta: Int) {
+        guard !hits.isEmpty else { return }
+        let current = focusedMeetingID.flatMap { id in hits.firstIndex { $0.id == id } } ?? (delta > 0 ? -1 : hits.count)
+        select(hits[min(max(0, current + delta), hits.count - 1)].id)
+    }
+    public func openMeeting(_ id: UUID) {
+        query = ""; tag = ""; filterDates = false; autoSelectNextSearch = false
+        selection = [id]; focusedMeetingID = id
+    }
+    public func toggleStar(_ meeting: Meeting) async {
+        do { try await store.setStarred(meeting.starred != true, meetingID: meeting.id); await reload() }
+        catch { message = error.localizedDescription }
+    }
+    public func updateSummaries() async {
+        guard !working else { return }
+        guard savedSettings.analysisEnabled else { message = "Enable Codex analysis in Settings first."; return }
+        working = true; defer { working = false }
+        do {
+            for meeting in outdatedMeetings where meeting.analysis != nil { try await coordinator.regenerate(meeting.id) }
+            await coordinator.run(updateNow: true); await reload()
+        } catch { message = error.localizedDescription }
+    }
+    public func regenerate(_ meeting: Meeting) async {
+        guard !working else { return }
+        working = true; defer { working = false }
+        do { try await coordinator.regenerate(meeting.id); await reload() }
+        catch { message = error.localizedDescription }
+    }
     public var tags: [String] { Array(Set(meetings.flatMap { $0.analysis?.analysis.tags ?? [] })).sorted() }
     public var flatFolders: [(folder: Folder, depth: Int)] {
         func walk(_ parent: UUID?, depth: Int) -> [(Folder, Int)] {
@@ -96,7 +165,7 @@ public struct CapturePresentation: Equatable {
         do {
             meetings = try await store.meetings(); folders = try await store.folders()
             if !loadedSettings {
-                settings = try await store.settings()
+                settings = try await store.settings(); savedSettings = settings
                 loadedSettings = true
             }
             var loaded: [UUID: FolderContext] = [:]
@@ -110,28 +179,35 @@ public struct CapturePresentation: Equatable {
         do {
             var search = SearchQuery()
             search.text = query; search.folderID = selectedFolder?.id; search.inbox = location == "inbox"
+            search.starredOnly = location == "starred"; search.oldestFirst = oldestFirst
             search.tag = tag.isEmpty ? nil : tag
             if filterDates { search.after = after; search.before = before }
-            let key = "\(location)|\(query)|\(tag)|\(filterDates)|\(search.after?.timeIntervalSince1970 ?? 0)|\(search.before?.timeIntervalSince1970 ?? 0)"
+            let key = "\(location)|\(oldestFirst)|\(query)|\(tag)|\(filterDates)|\(search.after?.timeIntervalSince1970 ?? 0)|\(search.before?.timeIntervalSince1970 ?? 0)"
             if key != searchKey { searchKey = key; requestedPages = 1 }
             search.limit = 100
             var loaded: [SearchHit] = []
-            hasMore = false
+            var more = false
             for page in 0..<requestedPages {
                 search.offset = page * 100
                 let next = try await store.search(search)
                 loaded += next
-                hasMore = next.count == 100
-                if !hasMore { break }
+                more = next.count == 100
+                if !more { break }
             }
-            hits = loaded
+            if searchKey == key {
+                hits = loaded; hasMore = more
+                let filtered = !query.isEmpty || !tag.isEmpty || filterDates || location == "starred"
+                if filtered { selection.formIntersection(loaded.map(\.id)) }
+                if selection.isEmpty && (autoSelectNextSearch || filtered), let first = loaded.first { select(first.id) }
+                autoSelectNextSearch = false
+            }
         } catch { message = error.localizedDescription }
     }
     public func loadMore() async { requestedPages += 1; await search() }
     @discardableResult public func saveSettings(processPending: Bool = true) async -> Bool {
         do {
             settings.codexModel = settings.codexModel.trimmingCharacters(in: .whitespacesAndNewlines)
-            try await store.saveSettings(settings)
+            try await store.saveSettings(settings); savedSettings = settings
             message = "Settings saved. Existing analyses are unchanged."
             if processPending { Task { await coordinator.run(); await reload() } }
             return true
@@ -139,7 +215,7 @@ public struct CapturePresentation: Equatable {
         catch { message = error.localizedDescription; return false }
     }
     public func openSettings() async {
-        do { settings = try await store.settings(); loadedSettings = true; settingsOpen = true }
+        do { settings = try await store.settings(); savedSettings = settings; loadedSettings = true; navigate("settings") }
         catch { message = error.localizedDescription }
     }
     public func checkCodex() async {

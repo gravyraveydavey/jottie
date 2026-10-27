@@ -35,9 +35,9 @@ let package = Package(
         .target(name: "JottieModels"),
         .target(name: "JottieLibrary", dependencies: ["JottieModels", .product(name: "GRDB", package: "GRDB.swift")]),
         .target(name: "JottieKnowledge", dependencies: ["JottieModels", "JottieLibrary", .product(name: "MSAL", package: "microsoft-authentication-library-for-objc")]),
-        .target(name: "JottieUI", dependencies: ["JottieModels", "JottieLibrary", "JottieKnowledge"]),
+        .target(name: "JottieUI", dependencies: ["JottieModels", "JottieLibrary", "JottieKnowledge"], resources: [.copy("Resources/Fonts")]),
         .target(name: "JottieMCP", dependencies: ["JottieModels", "JottieLibrary", .product(name: "MCP", package: "swift-sdk")]),
-        .testTarget(name: "JottieTests", dependencies: ["JottieModels", "JottieLibrary", "JottieKnowledge", "JottieMCP", "JottieUI"]),
+        .testTarget(name: "JottieTests", dependencies: ["JottieModels", "JottieLibrary", "JottieKnowledge", "JottieMCP", "JottieUI"], resources: [.copy("Fixtures")]),
         // Stable v1.9.4 and nightly b5130 are the same signed upstream commit
         // (927cfce), but the stable release was published without artifacts.
         // b5130 is therefore the official universal XCFramework for v1.9.4.

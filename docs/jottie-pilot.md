@@ -30,7 +30,7 @@ The Summary tab edits separate meeting-summary and folder-context prompts, each 
 
 The former Inbox is labelled Import. It remains the unfiled meeting collection; recording and AI filing behaviour are unchanged. Import accepts folders recursively and individual `.md`, `.markdown`, `.txt`, `.doc` and `.docx` documents, with one document per meeting. Word conversion runs locally using macOS textutil and only extracted text is retained. UTF-8/UTF-16 text and original Markdown content are preserved. Original files are untouched, repeated documents are deduplicated, updates retain manual filing, and unreadable files are reported while other documents continue. Legacy Amanu meeting bundles still import once with their existing summary/metadata, without also importing their Markdown projections or audio. Hidden files, symlinks, packages and Jottie's own library are excluded from scanning.
 
-The expandable processing panel reports `Processing X of Y items (%)`, using successful completions from the current work set rather than unrelated historical jobs. Deferred/failed work stays in the expanded detail with retry controls; a failed item does not advance the completion percentage. Hover tooltips describe manager toolbar actions.
+The expandable processing panel reports `Processing X of Y items (%)`, using successful completions from the current work set rather than unrelated historical jobs. Deferred/failed work stays in the expanded detail with retry controls; a failed item does not advance the completion percentage. Hover tooltips describe manager actions. The Queue page displays real outstanding work and its progress.
 
 ## MCP connection fields
 
@@ -40,7 +40,7 @@ The Codex dialog's **Server URL / Tunnel** choices describe other transports; ne
 
 ## Custom UI scope
 
-See [Custom interface feasibility](custom-ui-feasibility.md). A custom component system is feasible in SwiftUI without replacing the backend or stack. The note scopes the work; the visual redesign is not implemented.
+See [Custom interface feasibility](custom-ui-feasibility.md). A custom component system is feasible in SwiftUI without replacing the backend or stack. The supplied prototype is now implemented natively; see [Native interface implementation](native-ui-design.md) for scope, interaction mapping and known differences.
 
 ## Feedback pass verification — 26 October 2026
 
@@ -98,3 +98,7 @@ The meeting/transcription manager is Jottie's only main window. It contains reco
 Keep the bundle identifier `com.gravyraveydavey.jottie` and use the same signing identity across builds (`make SIGN_ID="Apple Development: …"`, or the distribution identity). Library files, Keychain configuration and capture preferences remain outside the bundle and are not replaced. In-place replacement alone cannot guarantee TCC grant persistence with ad-hoc signatures: their code requirement can change when the executable changes. No valid code-signing certificate was available on the development Mac during this update, so local pilot builds remain ad-hoc signed. Configure a persistent Apple signing identity for dependable permission continuity. The installer refuses to replace an app signed by a team with an ad-hoc build or another team's signature.
 
 Verification on 27 October 2026: 767 inherited Swift tests and the existing 32-test Jottie run passed (the optional preview was skipped), followed by the new manager close/reopen regression test. All 30 Python tests passed with two optional skips, including replacement rollback, active capture protection, signing-team protection and duplicate-bundle cleanup. The final arm64 pilot bundle passed signature, loader and macOS 14.2 checks. LaunchServices opened one canonical Jottie process; only `.build/Jottie.app` remains. Real recording permissions and capture were not re-tested in this pass.
+
+## Prototype-based native workspace
+
+The native manager now follows the supplied Jottie frontend prototype. Settings and Queue live within the same manager window. Stars and manual speaker job titles are stored in canonical meeting metadata; older records remain compatible. Existing summary revisions, local transcription, capture/recovery, filing, exports, evidence and MCP behaviour remain available. See [Native interface implementation](native-ui-design.md) for exact screen mappings, keyboard/drag interactions, provenance-related differences and verification.

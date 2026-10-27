@@ -1,0 +1,366 @@
+{
+  "demoFolders": [
+    {
+      "id": "projects",
+      "name": "Projects",
+      "children": [
+        {
+          "id": "jottie",
+          "name": "Jottie"
+        },
+        {
+          "id": "website",
+          "name": "Website"
+        }
+      ]
+    },
+    {
+      "id": "personal",
+      "name": "Personal",
+      "children": [
+        {
+          "id": "games",
+          "name": "Video games",
+          "children": [
+            {
+              "id": "zelda",
+              "name": "Legend of Zelda"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ideas",
+      "name": "Ideas & notes"
+    }
+  ],
+  "demoMeetings": [
+    {
+      "id": "product-weekly",
+      "title": "A calmer home for your meetings",
+      "date": "27 Oct 2026",
+      "time": "09:30",
+      "duration": "32 min",
+      "folder": "jottie",
+      "tags": [
+        "Product",
+        "Design"
+      ],
+      "participants": [
+        "Alex Morgan",
+        "Jamie Chen",
+        "Sam Ellis"
+      ],
+      "starred": true,
+      "summary": "The team explored a simpler way to organise recordings in Jottie. The direction is a familiar three-pane workspace: folders for context, a scannable meeting list, and a focused space to read. The first prototype will prioritise finding and revisiting conversations.",
+      "highlights": [
+        "Keep folders visible while moving between meetings, so you never lose your place.",
+        "Use the meeting summary as the list preview, with dates, duration and a few useful tags.",
+        "Give the summary and transcript their own views, with a shared meeting header."
+      ],
+      "decisions": [
+        "Move forward with a three-pane layout for the desktop experience.",
+        "Open meetings on the summary, with the transcript one click away."
+      ],
+      "actions": [
+        {
+          "task": "Explore the folder tree and meeting list together",
+          "owner": "Jamie"
+        },
+        {
+          "task": "Review the prototype with a small set of sample recordings",
+          "owner": "Alex"
+        },
+        {
+          "task": "Map the agreed component structure to the macOS app",
+          "owner": "Sam"
+        }
+      ],
+      "transcript": [
+        {
+          "time": "00:00",
+          "speaker": "Alex Morgan",
+          "text": "Let’s start with what happens after a meeting. You have a recording, but the useful part is being able to come back and find that one decision a week later."
+        },
+        {
+          "time": "00:24",
+          "speaker": "Jamie Chen",
+          "text": "I think the folder tree should stay with you. Then the next column can work like an inbox: a title, a date and enough of the summary to recognise the conversation."
+        },
+        {
+          "time": "01:08",
+          "speaker": "Sam Ellis",
+          "text": "That maps quite nicely to the desktop app. We can give each pane its own scroll area, so reading a long transcript doesn’t move your meeting list."
+        },
+        {
+          "time": "02:16",
+          "speaker": "Alex Morgan",
+          "text": "Exactly. Let’s make the default view a summary. I want to see the main points, what we decided and what needs to happen next."
+        },
+        {
+          "time": "03:42",
+          "speaker": "Jamie Chen",
+          "text": "And the transcript is one tab away. We don’t need to put everything on the screen at once. A bit of breathing room will make this much easier to read."
+        },
+        {
+          "time": "05:10",
+          "speaker": "Sam Ellis",
+          "text": "Let’s use sample meetings for the first pass. Once the layout feels right, we can map the component structure back to the native app."
+        }
+      ]
+    },
+    {
+      "id": "design-review",
+      "title": "Design review: small details, less friction",
+      "date": "26 Oct 2026",
+      "time": "14:00",
+      "duration": "24 min",
+      "folder": "jottie",
+      "tags": [
+        "Design"
+      ],
+      "participants": [
+        "Jamie Chen",
+        "Sam Ellis"
+      ],
+      "summary": "A review of navigation, selected states and reading comfort. We agreed to keep the interface quiet and let the meeting content do most of the talking.",
+      "highlights": [
+        "Selected meetings need a clear, quiet highlight.",
+        "Use one accent colour consistently for navigation and primary actions."
+      ],
+      "decisions": [
+        "Keep the toolbar compact and use labelled tabs for content views."
+      ],
+      "actions": [
+        {
+          "task": "Check the layout in both light and dark mode",
+          "owner": "Jamie"
+        }
+      ],
+      "transcript": [
+        {
+          "time": "00:00",
+          "speaker": "Jamie Chen",
+          "text": "The structure is working. I’d like to focus on the little things now: selected states, spacing and how comfortable a long summary is to read."
+        },
+        {
+          "time": "00:38",
+          "speaker": "Sam Ellis",
+          "text": "Let’s keep one clear accent colour. The rest can be neutral so that the content stays the focus."
+        }
+      ]
+    },
+    {
+      "id": "research",
+      "title": "What makes a meeting worth revisiting?",
+      "date": "26 Oct 2026",
+      "time": "10:00",
+      "duration": "41 min",
+      "folder": "jottie",
+      "tags": [
+        "Research",
+        "Product"
+      ],
+      "participants": [
+        "Alex Morgan",
+        "Robin Taylor"
+      ],
+      "summary": "Research planning around how people return to past conversations. Finding decisions and remembering context emerged as the two most useful starting points.",
+      "highlights": [
+        "People often remember the project before they remember the meeting title.",
+        "A short preview helps people recognise the right conversation."
+      ],
+      "decisions": [
+        "Test folder navigation alongside a search across meeting text."
+      ],
+      "actions": [
+        {
+          "task": "Draft five tasks for the next usability session",
+          "owner": "Robin"
+        }
+      ],
+      "transcript": [
+        {
+          "time": "00:00",
+          "speaker": "Robin Taylor",
+          "text": "When people look back, they’re usually asking what we decided, or why. We should build our research tasks around those questions."
+        },
+        {
+          "time": "01:12",
+          "speaker": "Alex Morgan",
+          "text": "And let’s check how they find the meeting in the first place. I suspect project folders and a useful preview will both matter."
+        }
+      ]
+    },
+    {
+      "id": "website",
+      "title": "Website direction & first impressions",
+      "date": "25 Oct 2026",
+      "time": "11:30",
+      "duration": "28 min",
+      "folder": "website",
+      "tags": [
+        "Design",
+        "Website"
+      ],
+      "participants": [
+        "Jamie Chen",
+        "Robin Taylor"
+      ],
+      "starred": true,
+      "summary": "The website should show the product in use and explain its value in a few clear sentences. A real product view will lead the homepage.",
+      "highlights": [
+        "Lead with the experience of finding useful moments in past meetings.",
+        "Keep the first page focused on one clear story."
+      ],
+      "decisions": [
+        "Use a product screenshot as the main visual."
+      ],
+      "actions": [
+        {
+          "task": "Sketch the first homepage section",
+          "owner": "Jamie"
+        }
+      ],
+      "transcript": [
+        {
+          "time": "00:00",
+          "speaker": "Jamie Chen",
+          "text": "The homepage should show the workspace straight away. People should be able to picture how it fits into their day."
+        },
+        {
+          "time": "00:45",
+          "speaker": "Robin Taylor",
+          "text": "Agreed. One clear story and a useful product image will go further than a long feature list."
+        }
+      ]
+    },
+    {
+      "id": "content",
+      "title": "A clearer story for the homepage",
+      "date": "24 Oct 2026",
+      "time": "15:15",
+      "duration": "18 min",
+      "folder": "website",
+      "tags": [
+        "Website",
+        "Content"
+      ],
+      "participants": [
+        "Alex Morgan",
+        "Robin Taylor"
+      ],
+      "summary": "A short working session on the homepage narrative, from capturing a conversation to finding the useful parts later.",
+      "highlights": [
+        "Explain the value through a familiar everyday task."
+      ],
+      "decisions": [
+        "Write the first draft around revisiting decisions."
+      ],
+      "actions": [
+        {
+          "task": "Prepare a short first draft",
+          "owner": "Robin"
+        }
+      ],
+      "transcript": [
+        {
+          "time": "00:00",
+          "speaker": "Alex Morgan",
+          "text": "Let’s tell the story from the moment someone needs to remember a decision. That gives the product a clear purpose."
+        }
+      ]
+    },
+    {
+      "id": "zelda",
+      "title": "A little detour through Hyrule",
+      "date": "23 Oct 2026",
+      "time": "18:20",
+      "duration": "12 min",
+      "folder": "zelda",
+      "tags": [
+        "Games",
+        "Personal"
+      ],
+      "participants": [
+        "Alex Morgan"
+      ],
+      "summary": "A personal voice note about exploration in Zelda, favourite soundtracks and the pleasure of discovering something without a map marker.",
+      "highlights": [
+        "The best discoveries often happen when the game leaves room for curiosity."
+      ],
+      "decisions": [],
+      "actions": [],
+      "transcript": [
+        {
+          "time": "00:00",
+          "speaker": "Alex Morgan",
+          "text": "I’ve been thinking about why exploring Hyrule feels so good. There’s always something just over the next hill, and the game trusts you to go and look."
+        }
+      ]
+    },
+    {
+      "id": "ideas",
+      "title": "An idea on the walk home",
+      "date": "22 Oct 2026",
+      "time": "17:45",
+      "duration": "4 min",
+      "folder": "ideas",
+      "tags": [
+        "Ideas",
+        "Product"
+      ],
+      "participants": [
+        "Alex Morgan"
+      ],
+      "summary": "A quick thought about giving each project folder a short overview of its recent conversations and open questions.",
+      "highlights": [
+        "A folder overview could help reconnect the threads between conversations."
+      ],
+      "decisions": [],
+      "actions": [
+        {
+          "task": "Sketch what a folder overview might contain",
+          "owner": "Alex"
+        }
+      ],
+      "transcript": [
+        {
+          "time": "00:00",
+          "speaker": "Alex Morgan",
+          "text": "What if opening a project folder gave you a little context before the meeting list? Just the recent decisions and the questions we haven’t answered yet."
+        }
+      ]
+    },
+    {
+      "id": "unfiled",
+      "title": "Monday morning thoughts",
+      "date": "19 Oct 2026",
+      "time": "08:50",
+      "duration": "6 min",
+      "folder": null,
+      "tags": [
+        "Ideas"
+      ],
+      "participants": [
+        "Alex Morgan"
+      ],
+      "summary": "A few thoughts for the week: finish the workspace prototype, leave time for a design review and keep the first version focused.",
+      "highlights": [
+        "A small, complete experience is easier to evaluate than a wide collection of unfinished screens."
+      ],
+      "decisions": [
+        "Review the workspace before adding more features."
+      ],
+      "actions": [],
+      "transcript": [
+        {
+          "time": "00:00",
+          "speaker": "Alex Morgan",
+          "text": "This week I want to get the workspace into a shape we can click around in. The goal is to understand the layout before we start connecting anything."
+        }
+      ]
+    }
+  ]
+}

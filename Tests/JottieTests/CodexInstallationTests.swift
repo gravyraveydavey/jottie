@@ -124,7 +124,7 @@ private func codexFixture(_ contents: String) throws -> URL {
     let account = MicrosoftAccount(), publisher = try GraphPublisher(tokens: account, root: root)
     let model = LibraryViewModel(store: store, coordinator: try KnowledgeCoordinator(store: store), account: account, publisher: publisher)
     await model.openSettings()
-    #expect(model.settingsOpen)
+    #expect(model.location == "settings")
     #expect(model.settings.analysisEnabled)
     #expect(model.settings.codexPath == "/chosen/codex")
     model.settings.analysisEnabled = false

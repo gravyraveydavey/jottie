@@ -146,6 +146,8 @@ public struct Meeting: Codable, Sendable, Equatable, Identifiable {
     public var analysis: AnalysisRevision?
     public var importedSummary: String?
     public var sourceMetadata: [String: String]?
+    public var starred: Bool?
+    public var speakerRoles: [String: String]?
     public init(id: UUID = UUID(), sourceID: String, title: String, startedAt: Date = Date(),
                 segments: [Segment], participants: [String] = [], speakerNames: [String: String] = [:]) {
         self.id = id; self.sourceID = sourceID; self.title = title; self.startedAt = startedAt
@@ -332,6 +334,8 @@ public struct SearchQuery: Sendable {
     public var folderID: UUID?
     public var inbox = false
     public var includeDescendants = true
+    public var starredOnly = false
+    public var oldestFirst = false
     public var tag: String?
     public var after: Date?
     public var before: Date?
