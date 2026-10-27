@@ -24,6 +24,9 @@ public struct CodexAnalyzer: MeetingAnalyzer {
             labels; multiple people may share an unresolved channel. Descriptive tags never authorise publication.
             Propose speakerCandidates only when explicit transcript evidence identifies a speaker and
             their channel. A candidate remains unconfirmed until the user accepts it.
+            Unseparated 'them' and 'speaker' labels may contain several people; never map a shared
+            channel to one person just because that name is mentioned or invited. Invitation order
+            and job titles are not voice evidence. Preserve ambiguity instead of guessing.
             Generate stable descriptive finding IDs. Use status open/resolved/unclear for questions.
             Return at most 10 tags, including the primary tag. Review the existing tag catalog before
             adding tags. Reuse suitable existing groups instead of creating near-duplicates. A slightly

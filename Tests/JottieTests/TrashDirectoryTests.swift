@@ -109,3 +109,49 @@ private actor DirectoryRunner: StructuredRunner {
     let old = try Codec.decode(LibrarySettings.self, from: Data("{}".utf8))
     #expect(!old.bambooEnabled && old.bambooCompany.isEmpty)
 }
+
+@Test func calendarMetadataRefreshesExistingCaptureWithoutLosingCorrections() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let capture = root.appendingPathComponent("source")
+    try FileManager.default.createDirectory(at: capture, withIntermediateDirectories: true)
+    let transcript = Data(#"{"segments":[{"speaker":"them","start_ms":0,"end_ms":1000,"text":"Hello Jamie."}]}"#.utf8)
+    try transcript.write(to: capture.appendingPathComponent("transcript.json"))
+    try Data(#"{"started":"2026-10-27T09:00:00Z"}"#.utf8).write(to: capture.appendingPathComponent("meta.json"))
+    let store = try LibraryStore(root: root.appendingPathComponent("library"))
+    let first = try await store.importAmanu(capture)
+    try await store.setSpeaker("them", name: "Manual correction", meetingID: first.id)
+    try Data(#"{"started":"2026-10-27T09:00:00Z","calendar":{"attendeeIdentities":["Jamie Chen <jamie@example.test>"]}}"#.utf8).write(to: capture.appendingPathComponent("meta.json"))
+    let refreshed = try await store.importAmanu(capture)
+    #expect(refreshed.id == first.id)
+    #expect(refreshed.participants == ["Jamie Chen <jamie@example.test>"])
+    #expect(refreshed.speakerNames["them"] == "Manual correction")
+    #expect(refreshed.segments == first.segments)
+}
+@Test func directoryEmailsAreTrimmedAndMailtoIsCaseInsensitive() {
+    let people = [DirectoryPerson(id: "1", name: "Jamie Chen", workEmail: " jamie@example.test ", jobTitle: "Designer")]
+    let matches = PeopleDirectory.match(["Jamie Chen < JAMIE@example.test >", "MAILTO:jamie@example.test"], people: people, company: "test", syncedAt: Date())
+    #expect(matches.count == 2)
+}
+
+@Test func manuallyAttachedCalendarWinsOverCaptureRefreshAndDoesNotRenameSpeakers() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let capture = root.appendingPathComponent("source")
+    try FileManager.default.createDirectory(at: capture, withIntermediateDirectories: true)
+    try Data(#"{"segments":[{"speaker":"them","start_ms":0,"end_ms":1000,"text":"Hello."}]}"#.utf8).write(to: capture.appendingPathComponent("transcript.json"))
+    try Data(#"{"started":"2026-10-27T09:00:00Z","calendar":{"attendees":["Other person"]}}"#.utf8).write(to: capture.appendingPathComponent("meta.json"))
+    let store = try LibraryStore(root: root.appendingPathComponent("library"))
+    let first = try await store.importAmanu(capture)
+    let event = CalendarEventContext(id: "chosen", calendarID: "work", calendarTitle: "Work Calendar", title: "The correct invitation", start: first.startedAt, end: first.startedAt.addingTimeInterval(3600), invitees: ["Jamie Chen <jamie@example.test>"])
+    try await store.setCalendarContext(event, meetingID: first.id)
+    let refreshed = try await store.importAmanu(capture)
+    #expect(refreshed.calendarContext == event && refreshed.calendarContextManuallySet == true)
+    #expect(refreshed.participants == event.invitees)
+    #expect(refreshed.speakerNames.isEmpty && refreshed.segments == first.segments)
+    let directory = try PeopleDirectory(root: store.root)
+    try await directory.replace([DirectoryPerson(id: "1", name: "Jamie Chen", workEmail: "jamie@example.test", jobTitle: "Designer")], company: "work")
+    let matches = try await directory.matching(refreshed.participants, company: "work")
+    #expect(matches.first?.jobTitle == "Designer")
+    #expect(try await store.setParticipantContext(matches, meetingID: first.id).speakerNames.isEmpty)
+}

@@ -590,3 +590,5 @@ project's provenance and explains how the architecture diverged.
 The name comes from *amanuensis*: a person whose job is to write down what is
 said. Amanu is free software under the [MIT license](LICENSE); dependency
 licenses are listed in [third-party notices](THIRD-PARTY-NOTICES.md).
+
+Jottie fork addition: `transcription.separate_speakers` enables optional local speaker separation after explicitly downloading its models in Recording settings. See [speaker handling](speaker-reconciliation.md).

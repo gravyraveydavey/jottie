@@ -3,6 +3,11 @@ import Foundation
 /// One timed span of recognized speech. Times are relative to whatever audio
 /// the engine was handed — a single track for `.perTrack` engines, the mixed
 /// session file for `.mixed` ones.
+struct TranscriptWord: Sendable {
+    let start: Double
+    let end: Double
+    let text: String
+}
 struct TranscriptSegment: Sendable {
     let start: TimeInterval
     let end: TimeInterval
@@ -11,12 +16,14 @@ struct TranscriptSegment: Sendable {
     /// (assemblyai's "A", "B", …). nil for per-track engines — there the track
     /// *is* the speaker, so the coordinator already knows.
     let speaker: String?
+    let words: [TranscriptWord]?
 
-    init(start: TimeInterval, end: TimeInterval, text: String, speaker: String? = nil) {
+    init(start: TimeInterval, end: TimeInterval, text: String, speaker: String? = nil, words: [TranscriptWord]? = nil) {
         self.start = start
         self.end = end
         self.text = text
         self.speaker = speaker
+        self.words = words
     }
 }
 

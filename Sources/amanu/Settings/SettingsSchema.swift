@@ -314,6 +314,10 @@ enum SettingsSchema {
                       "Выключено — только запись; хук on_stop всё равно срабатывает."),
                   .toggle, default: true, askedInSetup: true),
         ] + localModelEntries + [
+            Entry(["transcription", "separate_speakers"], localised("Separate remote voices locally", "Разделять голоса собеседников локально"),
+                  localised("Distinguish voices sharing the remote audio channel. Download Local speaker separation models first. Audio remains on this Mac; incomplete separation keeps audio for retry. Existing text-only meetings cannot be separated without their audio.",
+                            "Различать голоса в общей дорожке собеседников. Сначала скачайте локальные модели разделения голосов. Звук остаётся на маке; при ошибке он сохраняется для повторной попытки. Без исходного звука разделить старую текстовую запись нельзя."),
+                  .toggle, default: false),
             Entry(["transcript_echo_filter"],
                   localised("Drop echoed speech", "Убирать отражённую речь"),
                   localised(

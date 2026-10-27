@@ -438,6 +438,7 @@ actor TranscriptionCoordinator {
         SessionState.update(dir, with: [
             StopHook.key: StopHook.owed,
             "transcription_input": engine.input.metadataName,
+            "local_speaker_separation": inputs.separateSpeakers && engine.input == .perTrack ? "community-1" : nil,
             "echo_filter": [
                 "ran": echoFilterRan,
                 "dropped_segments": echoesDropped,

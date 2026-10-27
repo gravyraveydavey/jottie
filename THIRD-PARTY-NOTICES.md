@@ -68,3 +68,7 @@ ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
 WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+## Optional local speaker separation models
+
+Jottie can separately download the supported Community-1 Core ML artifacts from [FluidInference/speaker-diarization-coreml](https://huggingface.co/FluidInference/speaker-diarization-coreml): Segmentation, FBank, Embedding, PldaRho and PLDA parameters. They convert the pyannote/speaker-diarization-community-1 models and PLDA parameters; Jottie does not fine-tune or redistribute them in its application bundle. These artifacts are distributed under [Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/). See the publisher's [attribution notice](https://huggingface.co/FluidInference/speaker-diarization-coreml/blob/main/NOTICE.md) and [source/conversion provenance](https://huggingface.co/FluidInference/speaker-diarization-coreml/blob/main/PROVENANCE.md). This attribution applies to the supported Community-1 files, not the repository's separate legacy compatibility models.

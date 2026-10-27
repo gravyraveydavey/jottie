@@ -147,6 +147,8 @@ public struct Meeting: Codable, Sendable, Equatable, Identifiable {
     public var importedSummary: String?
     public var sourceMetadata: [String: String]?
     public var starred: Bool?
+    public var calendarContext: CalendarEventContext?
+    public var calendarContextManuallySet: Bool?
     public var participantContext: [ParticipantIdentity]?
     public var speakerRoles: [String: String]?
     public init(id: UUID = UUID(), sourceID: String, title: String, startedAt: Date = Date(),
@@ -408,4 +410,19 @@ public struct TrashEntry: Sendable, Identifiable {
     public var trashedAt: Date
     public init(id: String, meeting: Meeting, trashedAt: Date) { self.id = id; self.meeting = meeting; self.trashedAt = trashedAt }
     public var expiresAt: Date { trashedAt.addingTimeInterval(48 * 60 * 60) }
+}
+
+/// A single selected event; unrelated simultaneous events are never merged.
+public struct CalendarEventContext: Codable, Sendable, Equatable, Identifiable {
+    public var id: String
+    public var calendarID: String
+    public var calendarTitle: String
+    public var title: String
+    public var start: Date
+    public var end: Date
+    public var invitees: [String]
+    public init(id: String, calendarID: String, calendarTitle: String, title: String, start: Date, end: Date, invitees: [String]) {
+        self.id = id; self.calendarID = calendarID; self.calendarTitle = calendarTitle; self.title = title
+        self.start = start; self.end = end; self.invitees = invitees
+    }
 }

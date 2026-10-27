@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import EventKit
 import JottieModels
 import JottieLibrary
 import JottieKnowledge
@@ -156,7 +157,14 @@ import JottieKnowledge
                     model.settings.selectedCalendarIDs.removeAll { $0 == choice.id }; if selected { model.settings.selectedCalendarIDs.append(choice.id) }
                 })).toggleStyle(.checkbox).padding(.vertical, 4)
             }
-            description("Changes apply to future recordings. Relaunch after enabling calendar integration in Recording settings.")
+            let selected = model.calendars.filter { model.settings.selectedCalendarIDs.contains($0.id) }
+            description(selected.isEmpty ? "No available calendars selected. Choose the calendar containing your actual meeting invitations, then Save settings." : "Reading: " + selected.map(\.title).joined(separator: "; "))
+            description("A local ‘Default — Calendar’ may be empty even when Outlook has meetings. Select the relevant Exchange calendar. Selection changes apply after saving (enable Read the calendar in Recording and relaunch if it was disabled); use a meeting's Speakers tab to attach an earlier event and refresh directory matches.")
+        }.task {
+            if model.calendars.isEmpty && EKEventStore.authorizationStatus(for: .event) == .fullAccess {
+                do { model.calendars = try await EventKitCalendars().choices() }
+                catch { model.message = error.localizedDescription }
+            }
         }
     }
     private var bamboo: some View {

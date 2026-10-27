@@ -227,6 +227,14 @@ public actor LibraryStore: MeetingRepository {
             try commit(value)
         }
     }
+    public func setCalendarContext(_ context: CalendarEventContext, meetingID: UUID) throws {
+        try locked {
+            var meeting = try self.meeting(meetingID)
+            meeting.calendarContext = context; meeting.calendarContextManuallySet = true
+            meeting.participants = context.invitees; meeting.participantContext = nil
+            try commit(meeting)
+        }
+    }
     public func setParticipantContext(_ context: [ParticipantIdentity], meetingID: UUID) throws -> Meeting {
         try locked {
             var value = try meeting(meetingID)
@@ -546,8 +554,12 @@ public actor LibraryStore: MeetingRepository {
         }
         var value = Meeting(sourceID: sourceID, title: meta["title"] as? String ?? calendar["title"] as? String ?? directory.lastPathComponent,
                             startedAt: started, segments: parts, participants: calendar["attendeeIdentities"] as? [String] ?? calendar["attendees"] as? [String] ?? [])
+        if let snapshot = calendar["snapshot"], let encoded = try? JSONSerialization.data(withJSONObject: snapshot) {
+            value.calendarContext = try? Codec.decode(CalendarEventContext.self, from: encoded)
+        }
         value.sourceMetadata = ["engine": source.engine, "model": source.model, "createdAt": source.created_at,
                                 "recordingApp": meta["app"] as? String, "trigger": meta["trigger"] as? String,
+                                "speakerSeparation": meta["local_speaker_separation"] as? String,
                                 "transcriptSHA256": Codec.hash(data)].compactMapValues { $0 }
         if let summary = try? Data(contentsOf: directory.appendingPathComponent("summary.md")), summary.count <= 8_000_000 {
             value.importedSummary = String(data: summary, encoding: .utf8)
@@ -568,16 +580,23 @@ public actor LibraryStore: MeetingRepository {
             let all = try meetings()
             if var existing = all.first(where: { $0.sourceID == sourceID || ($0.transcriptRevision == value.transcriptRevision && $0.startedAt == started) }) {
                 try keepOriginal(existing.id)
+                var changed = false
                 if existing.transcriptRevision != value.transcriptRevision {
                     existing.segments = value.segments; existing.transcriptRevision = value.transcriptRevision; existing.analysis = nil
-                    existing.speakerNames = value.speakerNames
+                    // Preserve user corrections for channels that still exist; source naming fills only missing names.
+                    let labels = Set(value.segments.map(\.speaker))
+                    existing.speakerNames = existing.speakerNames.filter { labels.contains($0.key) }
+                    for (label, name) in value.speakerNames where existing.speakerNames[label] == nil { existing.speakerNames[label] = name }
                     existing.sourceMetadata = value.sourceMetadata
                     existing.importedSummary = value.importedSummary
-                    try commit(existing)
-                } else if existing.importedSummary == nil && value.importedSummary != nil {
-                    existing.importedSummary = value.importedSummary
-                    try commit(existing)
+                    changed = true
                 }
+                if existing.calendarContextManuallySet != true, value.calendarContext != nil || !value.participants.isEmpty {
+                    if existing.participants != value.participants { existing.participants = value.participants; existing.participantContext = nil; changed = true }
+                    if let context = value.calendarContext, existing.calendarContext != context { existing.calendarContext = context; changed = true }
+                }
+                if existing.importedSummary == nil && value.importedSummary != nil { existing.importedSummary = value.importedSummary; changed = true }
+                if changed { try commit(existing) }
                 return existing
             }
             try keepOriginal(value.id)

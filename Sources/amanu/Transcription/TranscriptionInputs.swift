@@ -19,6 +19,8 @@ struct TranscriptionInputs {
     let audio: URL
     let meta: SessionMeta
     let engine: TranscriptionEngine
+    var separateSpeakers: Bool = Config.localSpeakerSeparation()
+    var speakerIntervals: @Sendable (URL) async throws -> [SpeakerInterval] = { try await LocalSpeakerSeparation.intervals(for: $0) }
 
     func segments() async throws -> [Transcript.Segment] {
         switch engine.input {
@@ -165,9 +167,15 @@ struct TranscriptionInputs {
                 + "(\(engine.name))")
             // A failed track must not turn into a successful partial transcript:
             // successful completion allows the original audio to be discarded.
-            let segments: [TranscriptSegment]
+            var segments: [TranscriptSegment]
             do {
                 segments = try await engine.transcribe(file)
+                if separateSpeakers && (track.speaker == "them" || meta.isSingleSource) && !segments.isEmpty {
+                    log("separating local speaker voices in \(track.file)")
+                    let intervals = try await speakerIntervals(file)
+                    guard !intervals.isEmpty else { throw LocalSpeakerModels.ModelError.invalidParameters }
+                    segments = LocalSpeakerSeparation.applying(intervals, to: segments, side: track.speaker)
+                }
             } catch {
                 if let temporary { try? FileManager.default.removeItem(at: temporary) }
                 log("could not transcribe \(track.file): \(error)")
@@ -177,7 +185,7 @@ struct TranscriptionInputs {
             let offset = TimeInterval(track.offsetMs) / 1000
             merged += segments.map {
                 Transcript.Segment(
-                    speaker: track.speaker,
+                    speaker: separateSpeakers && (track.speaker == "them" || meta.isSingleSource) ? ($0.speaker ?? track.speaker) : track.speaker,
                     start_ms: Int(($0.start + offset) * 1000),
                     end_ms: Int(($0.end + offset) * 1000),
                     text: $0.text

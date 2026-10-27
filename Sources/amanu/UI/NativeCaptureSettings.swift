@@ -74,6 +74,11 @@ import JottieUI
             CaptureModelItem(id: model.directory.path, title: model.name,
                 status: model.isDownloaded ? "\(ByteCountFormatter.string(fromByteCount: Int64(model.bytes), countStyle: .file)) on disk" : "Not downloaded · About \(ByteCountFormatter.string(fromByteCount: Int64(model.advertisedBytes), countStyle: .file))", installed: model.isDownloaded)
         }
+        if Platform.supportsLocalModels {
+            let speakers = LocalSpeakerModels()
+            controller.models.append(CaptureModelItem(id: "local-speakers", title: "Local speaker separation",
+                status: speakers.isReady ? "Downloaded · Anonymous voices, not verified identities" : "Not downloaded · Required to distinguish voices in the remote channel", installed: speakers.isReady))
+        }
     }
     private func permissionLabel(_ state: SetupPermissions.State) -> String {
         switch state {
@@ -134,6 +139,20 @@ import JottieUI
             default:
                 let deleting = id.hasPrefix("delete:")
                 let path = String(id.dropFirst(deleting ? 7 : 9))
+                if path == "local-speakers" {
+                    let models = LocalSpeakerModels()
+                    if deleting {
+                        if FileManager.default.fileExists(atPath: models.root.path) { try FileManager.default.removeItem(at: models.root) }
+                        Config.update(path: ["transcription", "separate_speakers"], value: false)
+                        controller.message = "Deleted speaker models and disabled separation."
+                    } else {
+                        controller.message = "Downloading and validating local speaker models…"
+                        try await models.download()
+                        Config.update(path: ["transcription", "separate_speakers"], value: true)
+                        controller.message = "Local speaker separation is ready and enabled for future transcription."
+                    }
+                    return
+                }
                 guard let model = models.first(where: { $0.directory.path == path }) else { return }
                 if deleting {
                     let choice = TranscriptionChoice.read(engine: Config.transcriptionEngine(), cloudProvider: Config.transcriptionCloudProvider(), enabled: Config.transcriptionEnabled(), localModels: Platform.supportsLocalModels, localEngine: Config.transcriptionLocalEngine())

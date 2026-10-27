@@ -389,6 +389,8 @@ enum Config {
     /// useful half: it costs the same one-time permission prompt but doesn't
     /// depend on your calendar being an accurate description of what you're
     /// actually doing.
+    static func localSpeakerSeparation() -> Bool { flag(.localSpeakerSeparation, in: load()) }
+
     static func useCalendar() -> Bool {
         flag(.calendar, in: load())
     }

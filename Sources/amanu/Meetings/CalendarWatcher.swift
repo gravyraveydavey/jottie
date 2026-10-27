@@ -1,6 +1,7 @@
 import EventKit
 import Foundation
 import JottieModels
+import JottieUI
 
 /// Reads the local calendars for two things: a real name for the session
 /// folder instead of a bare timestamp, and a second, independent trigger for
@@ -25,6 +26,7 @@ final class CalendarWatcher {
         /// True when the event has other people or a conference link — the
         /// difference between a meeting and "dentist, 15:00".
         let looksLikeCall: Bool
+        var context: CalendarEventContext? = nil
     }
 
     private let store = EKEventStore()
@@ -75,7 +77,12 @@ final class CalendarWatcher {
     // MARK: -
 
     private func meetings(around date: Date, slack: TimeInterval) -> [Meeting] {
+        // A grant may have been made in the in-window Integrations page after capture startup.
+        let status = EKEventStore.authorizationStatus(for: .event)
+        if status == .fullAccess || (status == .notDetermined && EventKitCalendars.grantedDuringProcess) { authorized = true }
+        if status == .denied || status == .restricted { authorized = false }
         guard authorized else { return [] }
+        store.reset()
         let settingsURL = Home.current.url.appendingPathComponent("Library/Application Support/Jottie/settings.json")
         let selected = (try? Codec.decode(LibrarySettings.self, from: Data(contentsOf: settingsURL)))?.selectedCalendarIDs ?? []
         let calendars = store.calendars(for: .event).filter { Home.runsInsideTests || selected.contains($0.calendarIdentifier) }
@@ -92,7 +99,7 @@ final class CalendarWatcher {
             .sorted { $0.start < $1.start }
     }
 
-    private static func convert(_ event: EKEvent) -> Meeting {
+    static func convert(_ event: EKEvent) -> Meeting {
         let attendees = (event.attendees ?? []).compactMap { participant -> String? in
             participant.name
                 ?? participant.url.absoluteString.replacingOccurrences(of: "mailto:", with: "")
@@ -109,21 +116,20 @@ final class CalendarWatcher {
             .compactMap { $0 }
             .first { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
 
-        return Meeting(
+        var meeting = Meeting(
             id: event.eventIdentifier ?? UUID().uuidString,
             title: event.title ?? "meeting",
             start: event.startDate,
             end: event.endDate,
             attendees: attendees,
-            attendeeIdentities: (event.attendees ?? []).map { participant in
-                let email = participant.url.absoluteString.replacingOccurrences(of: "mailto:", with: "")
-                return participant.name.map { "\($0) <\(email)>" } ?? email
-            },
+            attendeeIdentities: MeetingCalendarEvents.context(event).invitees,
             link: link,
             // Self counts as an attendee, so "other people" means more than one.
             looksLikeCall: attendees.count > 1
                 || Self.conferenceMarkers.contains { haystack.contains($0) }
         )
+        meeting.context = MeetingCalendarEvents.context(event)
+        return meeting
     }
 
     /// Substrings that mean "there's a call link in here". Kept broad rather

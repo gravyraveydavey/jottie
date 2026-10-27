@@ -39,14 +39,19 @@ public actor PeopleDirectory {
         guard let synced = snapshot.syncedAt else { return [] }
         return Self.match(invitees, people: snapshot.people, company: company, syncedAt: synced)
     }
+    private static func email(_ input: String) -> String {
+        var value = input.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if value.hasPrefix("mailto:") { value.removeFirst(7) }
+        return value.replacingOccurrences(of: ">", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
     public static func match(_ invitees: [String], people: [DirectoryPerson], company: String, syncedAt: Date) -> [ParticipantIdentity] {
         invitees.compactMap { invitee -> ParticipantIdentity? in
             let value = invitee.trimmingCharacters(in: .whitespacesAndNewlines)
-            let email: String? = value.contains("@") ? (value.split(separator: "<").last.map(String.init) ?? value).replacingOccurrences(of: ">", with: "").replacingOccurrences(of: "mailto:", with: "").lowercased() : nil
+            let email: String? = value.contains("@") ? Self.email(value.split(separator: "<").last.map(String.init) ?? value) : nil
             let name = value.split(separator: "<").first.map(String.init) ?? value
             // An email present on an invite is authoritative for matching; never fall back to a conflicting name.
             let matches = people.filter { person in
-                if let email { return person.workEmail?.lowercased() == email }
+                if let email { return person.workEmail.map(Self.email) == email }
                 return LibraryStore.normalise(person.name) == LibraryStore.normalise(name)
             }
             guard matches.count == 1, let person = matches.first else { return nil }

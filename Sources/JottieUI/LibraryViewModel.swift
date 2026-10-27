@@ -7,11 +7,14 @@ import JottieKnowledge
 
 @MainActor public final class EventKitCalendars: CalendarProvider {
     private let store = EKEventStore()
+    public static var grantedDuringProcess = false
     public init() {}
     public func choices() async throws -> [CalendarChoice] {
-        let granted = EKEventStore.authorizationStatus(for: .event) == .fullAccess
+        let granted = EKEventStore.authorizationStatus(for: .event) == .fullAccess || Self.grantedDuringProcess
             ? true : try await store.requestFullAccessToEvents()
         guard granted else { throw JottieError.unavailable("Calendar access was denied. Enable it in System Settings.") }
+        Self.grantedDuringProcess = true
+        store.reset()
         return store.calendars(for: .event).map {
             CalendarChoice(id: $0.calendarIdentifier, title: "\($0.source.title) — \($0.title)")
         }.sorted { $0.title < $1.title }
@@ -332,6 +335,27 @@ public struct CapturePresentation: Equatable {
     public func emptyTrash() async {
         do { let count = try await store.purgeTrash(emptyAll: true); await reload(); message = "Deleted \(count) meetings from Trash." }
         catch { message = error.localizedDescription }
+    }
+    public func refreshPeople(for meeting: Meeting) async {
+        do {
+            let current = try await store.meeting(meeting.id)
+            let saved = try await store.settings()
+            guard saved.bambooEnabled else { message = "Connect BambooHR in Settings → Integrations first."; return }
+            let company = try BambooHR.company(saved.bambooCompany)
+            let directory = try PeopleDirectory(root: store.root)
+            let matches = try await directory.matching(current.participants, company: company)
+            _ = try await store.setParticipantContext(matches, meetingID: current.id)
+            await reload()
+            message = "Matched \(matches.count) of \(current.participants.count) invitees against the local directory. Summary revisions are unchanged."
+        } catch { message = error.localizedDescription }
+    }
+    public func attachCalendar(_ event: CalendarEventContext, to meeting: Meeting) async {
+        do {
+            try await store.setCalendarContext(event, meetingID: meeting.id)
+            await reload()
+            if savedSettings.bambooEnabled { await refreshPeople(for: meeting) }
+            else { message = "Calendar context attached. Regenerate explicitly to update the summary." }
+        } catch { message = error.localizedDescription }
     }
     public func refreshBambooStatus() async {
         guard let company = try? BambooHR.company(settings.bambooCompany) else { bambooStatus = "Enter a company address to connect."; return }

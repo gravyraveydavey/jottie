@@ -1,4 +1,5 @@
 import Foundation
+import JottieModels
 
 /// Everything jottie knows about a meeting at the moment it starts recording:
 /// what the calendar calls it, who else is invited, and which app is holding
@@ -26,6 +27,7 @@ struct MeetingContext {
     var appFamilies: [String] = []
     var attendees: [String] = []
     var attendeeIdentities: [String] = []
+    var calendarContext: CalendarEventContext?
     /// Conference link or location from the calendar event.
     var link: String?
     var scheduledStart: Date?
@@ -64,6 +66,7 @@ struct MeetingContext {
             scheduledEnd: meeting?.end
         )
         attendeeIdentities = meeting?.attendeeIdentities ?? []
+        calendarContext = meeting?.context
     }
 
     /// The part of a session folder's name that follows the timestamp, or nil
@@ -91,6 +94,7 @@ struct MeetingContext {
         if let title { calendar["title"] = title }
         if !attendees.isEmpty { calendar["attendees"] = attendees }
         if !attendeeIdentities.isEmpty { calendar["attendeeIdentities"] = attendeeIdentities }
+        if let calendarContext, let encoded = try? Codec.encode(calendarContext), let snapshot = try? JSONSerialization.jsonObject(with: encoded) { calendar["snapshot"] = snapshot }
         if let link { calendar["link"] = link }
         let iso = ISO8601DateFormatter()
         if let scheduledStart { calendar["scheduled_start"] = iso.string(from: scheduledStart) }
