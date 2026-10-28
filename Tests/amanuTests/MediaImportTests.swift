@@ -1,6 +1,8 @@
 import AVFoundation
 import Foundation
 import Testing
+import JottieModels
+import JottieLibrary
 
 @testable import amanu
 
@@ -160,6 +162,67 @@ struct MediaImportTests {
         #expect(result.duplicates.first?.existingSession.lastPathComponent
             == result.imported.first?.session.lastPathComponent)
         #expect(await normalizer.normalized == ["first.wav"])
+    }
+
+    @Test("Emptying Trash permits the same media to be imported as a fresh session")
+    func permanentlyDeletedMediaCanBeImportedAgain() async throws {
+        let base = try Self.temporaryDirectory("deleted-media")
+        defer { try? FileManager.default.removeItem(at: base) }
+        let source = base.appendingPathComponent("demo.mp4")
+        let original = Data("synthetic demo media".utf8)
+        try original.write(to: source)
+        let store = try LibraryStore(root: base.appendingPathComponent("library"))
+        let captureRoot = base.appendingPathComponent("Capture")
+        let normalizer = StubNormalizer()
+        let coordinator = JottieBridge.mediaImporter(root: captureRoot, libraryRoot: store.root, normalizer: normalizer)
+        let first = await coordinator.importFiles([source])
+        let old = try #require(first.imported.first?.session)
+        let transcript = Data(#"{"segments":[{"speaker":"speaker 1","start_ms":0,"end_ms":1000,"text":"An invented demonstration."}]}"#.utf8)
+        try transcript.write(to: old.appendingPathComponent("transcript.json"))
+        let meeting = try await store.importAmanu(old)
+        try await store.trash([meeting.id])
+        let stillRecoverable = await coordinator.importFiles([source])
+        #expect(stillRecoverable.imported.isEmpty && stillRecoverable.duplicates.first?.inTrash == true)
+        let trash = try #require(await store.trashEntries().first)
+        try await store.restoreTrash(trash.id)
+        let restored = await coordinator.importFiles([source])
+        #expect(restored.imported.isEmpty && restored.duplicates.first?.inTrash == false)
+        try await store.trash([meeting.id])
+        #expect(try await store.purgeTrash(emptyAll: true) == 1)
+        #expect(FileManager.default.fileExists(atPath: old.appendingPathComponent("meta.json").path))
+        let again = await coordinator.importFiles([source])
+        #expect(again.imported.count == 1 && again.duplicates.isEmpty && again.failures.isEmpty)
+        guard let fresh = again.imported.first?.session else { return }
+        #expect(fresh != old)
+        try transcript.write(to: fresh.appendingPathComponent("transcript.json"))
+        let imported = try await store.importAmanu(fresh)
+        #expect(imported.id != meeting.id)
+        #expect(try await store.meetings().count == 1)
+        #expect(try await !store.shouldImportAmanu(old))
+        let repeated = await coordinator.importFiles([source])
+        #expect(repeated.imported.isEmpty && repeated.duplicates.first?.existingSession == fresh)
+        // A fresh process must reach the same answer from durable library state.
+        let reopened = JottieBridge.mediaImporter(root: captureRoot, libraryRoot: store.root, normalizer: normalizer)
+        let afterRestart = await reopened.importFiles([source])
+        #expect(afterRestart.imported.isEmpty && afterRestart.duplicates.first?.existingSession == fresh)
+        #expect(try Data(contentsOf: source) == original)
+    }
+
+    @Test("An unreadable library status fails closed instead of importing a duplicate")
+    func duplicateStatusFailureDoesNotCopyMedia() async throws {
+        let base = try Self.temporaryDirectory("duplicate-status-failure")
+        defer { try? FileManager.default.removeItem(at: base) }
+        let source = base.appendingPathComponent("demo.mp4")
+        try Data("synthetic demo".utf8).write(to: source)
+        let root = base.appendingPathComponent("Capture")
+        let normalizer = StubNormalizer()
+        _ = await MediaImportCoordinator(root: root, normalizer: normalizer).importFiles([source])
+        let unavailable = MediaImportCoordinator(root: root, normalizer: normalizer, existingSessionStatus: { _ in
+            throw JottieError.unavailable("Synthetic library state failure")
+        })
+        let result = await unavailable.importFiles([source])
+        #expect(result.imported.isEmpty && result.duplicates.isEmpty && result.failures.count == 1)
+        #expect(await normalizer.normalized.count == 1)
     }
 
     @Test("Cancelling import removes its staging folder and leaves the source untouched")

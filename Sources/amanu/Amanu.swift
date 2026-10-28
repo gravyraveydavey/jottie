@@ -322,7 +322,7 @@ final class AppController {
     init(root: URL, followsConfiguredRoot: Bool = true, autoRecord watcher: AutoRecordController? = nil) {
         self.root = root
         self.followsConfiguredRoot = followsConfiguredRoot
-        mediaImport = MediaImportCoordinator(root: root)
+        mediaImport = JottieBridge.mediaImporter(root: root)
 
         let settings = Config.autoRecord()
         // The calendar is worth reading for names even when it isn't a
@@ -713,7 +713,7 @@ final class AppController {
         // For the same reason `Run` sits in the recordings folder at launch:
         // an agent CLI started anywhere else goes looking around it.
         FileManager.default.changeCurrentDirectoryPath(folder.path)
-        mediaImport = MediaImportCoordinator(root: folder)
+        mediaImport = JottieBridge.mediaImporter(root: folder)
         FileHandle.standardError.write(Data("recordings → \(folder.path)\n".utf8))
         // The new folder may be an old one, with its own leftovers: a crash
         // to adopt, sessions nobody transcribed.

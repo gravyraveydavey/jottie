@@ -28,10 +28,17 @@ enum MediaImportPresentation {
         var parts = [localised(
             "Imported \(result.imported.count)",
             "Импортировано: \(result.imported.count)")]
-        if !result.duplicates.isEmpty {
+        let activeDuplicates = result.duplicates.filter { !$0.inTrash }.count
+        let trashedDuplicates = result.duplicates.filter(\.inTrash).count
+        if activeDuplicates > 0 {
             parts.append(localised(
-                "\(result.duplicates.count) already here",
-                "уже было: \(result.duplicates.count)"))
+                "\(activeDuplicates) already here",
+                "уже было: \(activeDuplicates)"))
+        }
+        if trashedDuplicates > 0 {
+            parts.append(localised(
+                "\(trashedDuplicates) in Trash — restore there, or empty Trash to import again",
+                "в корзине: \(trashedDuplicates) — восстановите запись или очистите корзину для повторного импорта"))
         }
         if !result.failures.isEmpty {
             parts.append(localised(

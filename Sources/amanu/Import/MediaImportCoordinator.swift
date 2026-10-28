@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import JottieLibrary
 
 /// Turns files chosen in Finder into ordinary filesystem-backed sessions.
 /// Importing is serial: normalization can be expensive, and running several
@@ -15,6 +16,7 @@ actor MediaImportCoordinator {
     struct Duplicate: Sendable {
         let source: URL
         let existingSession: URL
+        var inTrash = false
     }
 
     struct Failure: Sendable {
@@ -44,6 +46,7 @@ actor MediaImportCoordinator {
     private let root: URL
     private let normalizer: any MediaNormalizing
     private let now: @Sendable () -> Date
+    private let existingSessionStatus: @Sendable (URL) async throws -> LibraryStore.CaptureSourceStatus
     private var cancellationRequested = false
     private var activeHash: Task<String, Error>?
     private var activeNormalization: Task<Void, Error>?
@@ -51,11 +54,13 @@ actor MediaImportCoordinator {
     init(
         root: URL,
         normalizer: any MediaNormalizing = MediaNormalizer(),
-        now: @escaping @Sendable () -> Date = Date.init
+        now: @escaping @Sendable () -> Date = Date.init,
+        existingSessionStatus: @escaping @Sendable (URL) async throws -> LibraryStore.CaptureSourceStatus = { _ in .active }
     ) {
         self.root = root.standardizedFileURL.resolvingSymlinksInPath()
         self.normalizer = normalizer
         self.now = now
+        self.existingSessionStatus = existingSessionStatus
         Self.removeStaleStaging(in: self.root)
     }
 
@@ -96,8 +101,8 @@ actor MediaImportCoordinator {
                 switch outcome {
                 case .imported(let session):
                     result.imported.append(Imported(source: source, session: session))
-                case .duplicate(let session):
-                    result.duplicates.append(Duplicate(source: source, existingSession: session))
+                case .duplicate(let session, let inTrash):
+                    result.duplicates.append(Duplicate(source: source, existingSession: session, inTrash: inTrash))
                 }
             } catch is CancellationError {
                 result.cancelled = true
@@ -121,7 +126,7 @@ actor MediaImportCoordinator {
 
     private enum OneOutcome {
         case imported(URL)
-        case duplicate(URL)
+        case duplicate(URL, inTrash: Bool)
     }
 
     private func importOne(
@@ -140,9 +145,10 @@ actor MediaImportCoordinator {
         let digest = try await hashing.value
         activeHash = nil
         try checkCancellation()
-        if let existing = existingSession(with: digest, bytes: probe.sourceBytes) {
-            return .duplicate(existing)
+        if let existing = try await existingSession(with: digest, bytes: probe.sourceBytes) {
+            return .duplicate(existing.session, inTrash: existing.inTrash)
         }
+        try checkCancellation()
 
         let staging = root.appendingPathComponent(
             ".import-\(UUID().uuidString)", isDirectory: true)
@@ -199,19 +205,29 @@ actor MediaImportCoordinator {
         if cancellationRequested || Task.isCancelled { throw CancellationError() }
     }
 
-    private func existingSession(with digest: String, bytes: Int64) -> URL? {
+    private func existingSession(with digest: String, bytes: Int64) async throws -> (session: URL, inTrash: Bool)? {
         guard let entries = try? FileManager.default.contentsOfDirectory(
             at: root, includingPropertiesForKeys: nil)
         else { return nil }
-        return entries.first { dir in
+        for dir in entries.sorted(by: { $0.path < $1.path }) {
+            try checkCancellation()
             guard
                 let meta = SessionState.read(dir),
                 let imported = meta["import"] as? [String: Any],
                 imported["sha256"] as? String == digest
-            else { return false }
+            else { continue }
             let storedBytes = (imported["source_bytes"] as? NSNumber)?.int64Value
-            return storedBytes == bytes
+            guard storedBytes == bytes else { continue }
+            let session = dir.standardizedFileURL.resolvingSymlinksInPath()
+            let status = try await existingSessionStatus(session)
+            try checkCancellation()
+            switch status {
+            case .active: return (session, false)
+            case .trashed: return (session, true)
+            case .deleted: continue
+            }
         }
+        return nil
     }
 
     private func uniqueDestination(for source: URL, at date: Date) -> URL {

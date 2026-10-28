@@ -300,6 +300,23 @@ public actor LibraryStore: MeetingRepository {
         let sourceID = Codec.hash(directory.standardizedFileURL.path)
         return try !retiredSources().contains(sourceID)
     }
+    public enum CaptureSourceStatus: Sendable, Equatable { case active, trashed, deleted }
+    /// A retired capture must not be resurrected by background scanning, but
+    /// its receipt must not block a deliberate fresh import after permanent deletion.
+    public func captureSourceStatus(_ directory: URL) throws -> CaptureSourceStatus {
+        let sourceID = Codec.hash(directory.standardizedFileURL.path)
+        let evaluate = { () throws -> CaptureSourceStatus in
+            let trash = self.root.appendingPathComponent("Trash")
+            if FileManager.default.fileExists(atPath: trash.path),
+               try self.trashItems(now: Date()).contains(where: { $0.meeting.sourceID == sourceID }) { return .trashed }
+            guard try self.retiredSources().contains(sourceID) else { return .active }
+            // Recovery may have committed a restoration before clearing its tombstone.
+            if try self.meetings().contains(where: { $0.sourceID == sourceID }) { return .active }
+            return .deleted
+        }
+        if readOnly { return try evaluate() }
+        return try locked(evaluate)
+    }
     /// Old un-timestamped Trash gets a full grace period from first discovery.
     private func trashItems(now: Date) throws -> [TrashEntry] {
         let items = try FileManager.default.contentsOfDirectory(at: root.appendingPathComponent("Trash"), includingPropertiesForKeys: nil,

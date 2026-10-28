@@ -21,6 +21,14 @@ import JottieMCP
     private var errorMessage: String?
     private var capture = CapturePresentation()
     private init() {}
+    nonisolated static func mediaImporter(root: URL, libraryRoot: URL? = nil,
+                                         normalizer: any MediaNormalizing = MediaNormalizer()) -> MediaImportCoordinator {
+        let libraryRoot = libraryRoot ?? Home.current.url.appendingPathComponent("Library/Application Support/Jottie")
+        return MediaImportCoordinator(root: root, normalizer: normalizer, existingSessionStatus: { directory in
+            let store = try LibraryStore(root: libraryRoot, readOnly: true)
+            return try await store.captureSourceStatus(directory)
+        })
+    }
     func start(root: URL, onCaptureSettings: @escaping () -> Void, onRecord: @escaping () -> Void,
                onPause: @escaping () -> Void, onAutoRecord: @escaping () -> Void, onLive: @escaping (Bool) -> Void,
                onImportMedia: @escaping ([URL]) -> Void, onRetryTranscription: @escaping () -> Void) {

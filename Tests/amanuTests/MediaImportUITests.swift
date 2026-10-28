@@ -53,6 +53,17 @@ struct MediaImportUITests {
         #expect(copy.fraction == 0.375)
     }
 
+    @Test("An item in Trash is explained as recoverable, not already in the library")
+    func trashDuplicateCopy() {
+        var result = MediaImportCoordinator.Result()
+        result.duplicates = [.init(source: URL(fileURLWithPath: "/tmp/demo.mp4"),
+            existingSession: URL(fileURLWithPath: "/tmp/session"), inTrash: true)]
+        let label = MediaImportPresentation.finished(result).label
+        #expect(label.contains("1 in Trash"))
+        #expect(label.contains("empty Trash to import again"))
+        #expect(!label.contains("already here"))
+    }
+
     @Test("Import completion distinguishes successes, duplicates and failures")
     func completionCopy() {
         var result = MediaImportCoordinator.Result()
