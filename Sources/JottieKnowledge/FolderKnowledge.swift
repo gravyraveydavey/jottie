@@ -112,6 +112,7 @@ public struct CodexFolderContext: FolderContextService {
 public actor KnowledgeCoordinator {
     private let store: LibraryStore
     public let ledger: WorkLedger
+    private let defaultSpeakerName: @Sendable () -> String?
     private let analyzer: (any MeetingAnalyzer)?
     private let contexts: (any FolderContextService)?
     private let publication: (any MeetingPublisher)?
@@ -119,7 +120,9 @@ public actor KnowledgeCoordinator {
     private var lastContextCheck = Date.distantPast
     private var progressIDs = Set<String>()
     public init(store: LibraryStore, analyzer: (any MeetingAnalyzer)? = nil,
-                contexts: (any FolderContextService)? = nil, publisher: (any MeetingPublisher)? = nil) throws {
+                contexts: (any FolderContextService)? = nil, publisher: (any MeetingPublisher)? = nil,
+                defaultSpeakerName: @escaping @Sendable () -> String? = { nil }) throws {
+        self.defaultSpeakerName = defaultSpeakerName
         self.store = store; self.analyzer = analyzer; self.contexts = contexts; publication = publisher
         ledger = try WorkLedger(root: store.root)
     }
@@ -213,7 +216,12 @@ public actor KnowledgeCoordinator {
         try await store.apply(revision, to: id)
     }
     private func enrichedMeeting(_ id: UUID, settings: LibrarySettings) async throws -> Meeting {
-        let value = try await store.meeting(id)
+        var value = try await store.meeting(id)
+        if let name = defaultSpeakerName()?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty,
+           value.segments.contains(where: { $0.speaker == "me" }), value.speakerNames["me"]?.isEmpty != false {
+            try await store.setSpeaker("me", name: name, meetingID: id)
+            value = try await store.meeting(id)
+        }
         var context: [ParticipantIdentity] = []
         if settings.bambooEnabled, let company = try? BambooHR.company(settings.bambooCompany) {
             let directory = try PeopleDirectory(root: store.root)

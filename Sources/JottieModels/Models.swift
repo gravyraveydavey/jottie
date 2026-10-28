@@ -59,10 +59,14 @@ public struct Finding: Codable, Sendable, Equatable, Identifiable {
     }
 }
 public struct SpeakerCandidate: Codable, Sendable, Equatable {
+    public var segmentIDs: [String]?
+    public var confidence: Double?
+    public var basis: [String]?
     public var label: String
     public var name: String
     public var evidence: [Evidence]
-    public init(label: String, name: String, evidence: [Evidence]) {
+    public init(label: String, name: String, evidence: [Evidence], segmentIDs: [String]? = nil, confidence: Double? = nil, basis: [String]? = nil) {
+        self.segmentIDs = segmentIDs; self.confidence = confidence; self.basis = basis
         self.label = label; self.name = name; self.evidence = evidence
     }
 }
@@ -107,8 +111,12 @@ public struct Analysis: Codable, Sendable, Equatable {
         guard candidates.allSatisfy({ !$0.name.isEmpty && !$0.evidence.isEmpty }) else {
             throw JottieError.invalid("Invalid speaker candidate.")
         }
-        for candidate in candidates where !segments.contains(where: { $0.speaker == candidate.label }) {
-            throw JottieError.invalid("Speaker candidate refers to an unknown channel.")
+        for candidate in candidates {
+            guard segments.contains(where: { $0.speaker == candidate.label }),
+                  candidate.confidence.map({ $0.isFinite && (0...1).contains($0) }) ?? true,
+                  (candidate.segmentIDs ?? []).allSatisfy({ id in segments.contains { $0.id == id && $0.speaker == candidate.label } }),
+                  (candidate.basis ?? []).allSatisfy({ ["self_introduction", "direct_address_response", "elimination", "role_context", "alias", "voice_consistency"].contains($0) })
+            else { throw JottieError.invalid("Invalid speaker attribution scope or confidence.") }
         }
         for evidence in summaryEvidence + findings.flatMap(\.evidence) + candidates.flatMap(\.evidence) {
             guard !evidence.quote.isEmpty, source[evidence.segmentID]?.contains(evidence.quote) == true
@@ -151,6 +159,7 @@ public struct Meeting: Codable, Sendable, Equatable, Identifiable {
     public var calendarContextManuallySet: Bool?
     public var participantContext: [ParticipantIdentity]?
     public var speakerRoles: [String: String]?
+    public var speakerAttributions: [String: SpeakerAttribution]?
     public init(id: UUID = UUID(), sourceID: String, title: String, startedAt: Date = Date(),
                 segments: [Segment], participants: [String] = [], speakerNames: [String: String] = [:]) {
         self.id = id; self.sourceID = sourceID; self.title = title; self.startedAt = startedAt
@@ -158,9 +167,13 @@ public struct Meeting: Codable, Sendable, Equatable, Identifiable {
         manuallyFiled = false
         transcriptRevision = Codec.hash((try? Codec.encode(segments)) ?? Data())
     }
+    public var speakerRevision: String {
+        Codec.hash(((try? Codec.encode(speakerAttributions ?? [:])) ?? Data()) + ((try? Codec.encode(speakerNames)) ?? Data()) + ((try? Codec.encode(speakerRoles ?? [:])) ?? Data()))
+    }
     public var displayTitle: String { analysis?.analysis.title ?? title }
     public var transcript: String {
-        segments.map { "[\($0.startMS / 60000):\(String(format: "%02d", $0.startMS / 1000 % 60))] \(speakerNames[$0.speaker] ?? $0.speaker): \($0.text)" }
+        let names = displaySpeakerNames
+        return segments.map { "[\($0.startMS / 60000):\(String(format: "%02d", $0.startMS / 1000 % 60))] \(names[$0.id] ?? "Unknown speaker"): \($0.text)" }
             .joined(separator: "\n\n")
     }
     public var markdown: String {
@@ -294,7 +307,7 @@ public struct LibrarySettings: Codable, Sendable, Equatable {
     public var microsoftTenantID = ""
     public init() {}
     public static let efforts = ["", "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"]
-    public var analysisRevision: String { Codec.hash(summaryPrompt + "\n" + codexModel + "\n" + codexEffort + "\ntag-policy-v1") }
+    public var analysisRevision: String { Codec.hash(summaryPrompt + "\n" + codexModel + "\n" + codexEffort + "\ntag-policy-v1\nspeaker-reconciliation-v2") }
     public var contextRevision: String { Codec.hash(folderContextPrompt + "\n" + codexModel + "\n" + codexEffort + "\nsummary-only-v2") }
     enum CodingKeys: String, CodingKey {
         case schemaVersion, summaryPrompt, folderContextPrompt, refreshMinutes, analysisEnabled, codexPath,
@@ -382,6 +395,7 @@ public protocol MeetingPublisher: Sendable {
 
 /// A calendar invite matched uniquely to the local directory. Never a confirmed speaker.
 public struct ParticipantIdentity: Codable, Sendable, Equatable {
+    public var aliases: [String]?
     public var invitee: String
     public var employeeID: String
     public var name: String
@@ -390,17 +404,20 @@ public struct ParticipantIdentity: Codable, Sendable, Equatable {
     public var company: String
     public var matchedBy: String
     public var syncedAt: Date
-    public init(invitee: String, employeeID: String, name: String, workEmail: String?, jobTitle: String?, company: String, matchedBy: String, syncedAt: Date) {
+    public init(invitee: String, employeeID: String, name: String, workEmail: String?, jobTitle: String?, company: String, matchedBy: String, syncedAt: Date, aliases: [String]? = nil) {
+        self.aliases = aliases
         self.invitee = invitee; self.employeeID = employeeID; self.name = name; self.workEmail = workEmail
         self.jobTitle = jobTitle; self.company = company; self.matchedBy = matchedBy; self.syncedAt = syncedAt
     }
 }
 public struct DirectoryPerson: Codable, Sendable, Equatable, Identifiable {
+    public var aliases: [String]?
     public var id: String
     public var name: String
     public var workEmail: String?
     public var jobTitle: String?
-    public init(id: String, name: String, workEmail: String? = nil, jobTitle: String? = nil) {
+    public init(id: String, name: String, workEmail: String? = nil, jobTitle: String? = nil, aliases: [String]? = nil) {
+        self.aliases = aliases
         self.id = id; self.name = name; self.workEmail = workEmail; self.jobTitle = jobTitle
     }
 }

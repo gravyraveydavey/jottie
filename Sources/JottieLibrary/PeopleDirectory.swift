@@ -9,7 +9,7 @@ public actor PeopleDirectory {
         try LibraryStore.directory(root)
         database = try DatabaseQueue(path: root.appendingPathComponent("directory.sqlite").path)
         try database.write { db in
-            try db.execute(sql: "CREATE TABLE IF NOT EXISTS directory(company TEXT, id TEXT, name TEXT, email TEXT, title TEXT, PRIMARY KEY(company,id)); CREATE TABLE IF NOT EXISTS directory_sync(company TEXT PRIMARY KEY, synced REAL NOT NULL)")
+            try db.execute(sql: "CREATE TABLE IF NOT EXISTS directory_aliases(company TEXT, id TEXT, alias TEXT, PRIMARY KEY(company,id,alias)); CREATE TABLE IF NOT EXISTS directory(company TEXT, id TEXT, name TEXT, email TEXT, title TEXT, PRIMARY KEY(company,id)); CREATE TABLE IF NOT EXISTS directory_sync(company TEXT PRIMARY KEY, synced REAL NOT NULL)")
         }
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: root.appendingPathComponent("directory.sqlite").path)
     }
@@ -21,17 +21,31 @@ public actor PeopleDirectory {
             for person in people {
                 try db.execute(sql: "INSERT INTO directory VALUES(?,?,?,?,?)", arguments: [company, person.id, person.name, person.workEmail, person.jobTitle])
             }
+            try db.execute(sql: "DELETE FROM directory_aliases WHERE company != ? OR id NOT IN (SELECT id FROM directory WHERE company=?)", arguments: [company, company])
             try db.execute(sql: "INSERT INTO directory_sync VALUES(?,?)", arguments: [company, now.timeIntervalSince1970])
         }
     }
-    public func clear() throws { try database.write { try $0.execute(sql: "DELETE FROM directory; DELETE FROM directory_sync") } }
+    public func clear() throws { try database.write { try $0.execute(sql: "DELETE FROM directory; DELETE FROM directory_sync; DELETE FROM directory_aliases") } }
     public func snapshot(company: String) throws -> (people: [DirectoryPerson], syncedAt: Date?) {
         try database.read { db in
             let people = try Row.fetchAll(db, sql: "SELECT * FROM directory WHERE company=? ORDER BY name,id", arguments: [company]).map {
-                DirectoryPerson(id: $0["id"], name: $0["name"], workEmail: $0["email"], jobTitle: $0["title"])
+                row -> DirectoryPerson in
+                let id: String = row["id"]
+                let aliases = try String.fetchAll(db, sql: "SELECT alias FROM directory_aliases WHERE company=? AND id=? ORDER BY alias", arguments: [company, id])
+                return DirectoryPerson(id: id, name: row["name"], workEmail: row["email"], jobTitle: row["title"], aliases: aliases.isEmpty ? nil : aliases)
             }
             let timestamp = try Double.fetchOne(db, sql: "SELECT synced FROM directory_sync WHERE company=?", arguments: [company])
             return (people, timestamp.map(Date.init(timeIntervalSince1970:)))
+        }
+    }
+    /// Custom aliases survive directory refreshes for the same company and employee ID.
+    public func setAliases(_ aliases: [String], employeeID: String, company: String) throws {
+        let cleaned = Array(Set(aliases.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }))
+        guard cleaned.count <= 50, cleaned.allSatisfy({ $0.count <= 120 }) else { throw JottieError.invalid("Use at most 50 aliases of 120 characters each.") }
+        try database.write { db in
+            guard try Int.fetchOne(db, sql: "SELECT count(*) FROM directory WHERE company=? AND id=?", arguments: [company, employeeID]) == 1 else { throw JottieError.invalid("Directory person is unavailable.") }
+            try db.execute(sql: "DELETE FROM directory_aliases WHERE company=? AND id=?", arguments: [company, employeeID])
+            for alias in cleaned { try db.execute(sql: "INSERT INTO directory_aliases VALUES(?,?,?)", arguments: [company, employeeID, alias]) }
         }
     }
     public func matching(_ invitees: [String], company: String) throws -> [ParticipantIdentity] {
@@ -52,11 +66,11 @@ public actor PeopleDirectory {
             // An email present on an invite is authoritative for matching; never fall back to a conflicting name.
             let matches = people.filter { person in
                 if let email { return person.workEmail.map(Self.email) == email }
-                return LibraryStore.normalise(person.name) == LibraryStore.normalise(name)
+                return NameAliases.all(name: person.name, aliases: person.aliases).contains { NameAliases.normalise($0) == NameAliases.normalise(name) }
             }
             guard matches.count == 1, let person = matches.first else { return nil }
             return ParticipantIdentity(invitee: invitee, employeeID: person.id, name: person.name, workEmail: person.workEmail,
-                jobTitle: person.jobTitle, company: company, matchedBy: email == nil ? "unique-name" : "email", syncedAt: syncedAt)
+                jobTitle: person.jobTitle, company: company, matchedBy: email != nil ? "email" : (NameAliases.normalise(person.name) == NameAliases.normalise(name) ? "unique-name" : "unique-alias"), syncedAt: syncedAt, aliases: NameAliases.all(name: person.name, aliases: person.aliases))
         }
     }
 }

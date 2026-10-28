@@ -67,7 +67,7 @@ import JottieLibrary
     }
     private var dateLabel: some View { Label(meeting.startedAt.formatted(.dateTime.day().month(.abbreviated).year()), systemImage: "calendar") }
     private var timeLabel: some View { Label(meeting.startedAt.formatted(.dateTime.hour().minute()) + (meeting.durationLabel.map { " · " + $0 } ?? ""), systemImage: "clock") }
-    private var speakersLabel: some View { Label("\(meeting.speakerLabels.count) speaker labels", systemImage: "person.2") }
+    private var speakersLabel: some View { Label("\(meeting.reconciledSpeakers.count) speaker entries", systemImage: "person.2") }
     private var summary: some View {
         VStack(alignment: .leading, spacing: 32) {
             HStack {
@@ -122,14 +122,15 @@ import JottieLibrary
     }
     private var transcript: some View {
         LazyVStack(alignment: .leading, spacing: 30) {
-            Label(meeting.speakerLabels.map { meeting.speakerNames[$0].flatMap { $0.isEmpty ? nil : $0 } ?? $0 }.joined(separator: ", "), systemImage: "person.2")
+            Label(meeting.reconciledSpeakers.map(\.name).joined(separator: ", "), systemImage: "person.2")
                 .font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted)
+            let displayNames = meeting.displaySpeakerNames
             ForEach(meeting.segments) { segment in
                 HStack(alignment: .top, spacing: 18) {
                     Text(String(format: "%02d:%02d", segment.startMS / 60000, segment.startMS / 1000 % 60))
                         .font(JottieStyle.mono()).foregroundStyle(JottieStyle.muted).padding(.top, 1).frame(width: 38, alignment: .leading)
                     VStack(alignment: .leading, spacing: 10) {
-                        Text(meeting.speakerNames[segment.speaker].flatMap { $0.isEmpty ? nil : $0 } ?? segment.speaker).font(JottieStyle.font(12, .semibold))
+                        Text(displayNames[segment.id] ?? "Unknown speaker").font(JottieStyle.font(12, .semibold))
                         prose(segment.text)
                     }.frame(maxWidth: .infinity, alignment: .leading)
                 }.padding(8).background(targetSegment == segment.id ? JottieStyle.selection : .clear, in: RoundedRectangle(cornerRadius: 8)).id(segment.id)
@@ -151,7 +152,7 @@ import JottieLibrary
     private func copy() {
         let text: String
         if tab == "Transcript" { text = meeting.transcript }
-        else if tab == "Speakers" { text = meeting.speakerLabels.map { "\(meeting.speakerNames[$0] ?? $0) — \(meeting.speakerRoles?[$0] ?? "")" }.joined(separator: "\n") }
+        else if tab == "Speakers" { text = meeting.reconciledSpeakers.map { "\($0.name) — \($0.jobTitle ?? "")" }.joined(separator: "\n") }
         else { text = meeting.markdown.components(separatedBy: "\n## Transcript\n").first ?? meeting.markdown }
         NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string); copied = true
     }
@@ -191,89 +192,6 @@ private struct EvidenceLinks: View {
     }
 }
 
-@MainActor private struct InlineSpeakers: View {
-    @ObservedObject var model: LibraryViewModel
-    let meeting: Meeting
-    @ViewState private var names: [String: String] = [:]
-    @ViewState private var roles: [String: String] = [:]
-    @ViewState private var saved = false
-    @ViewState private var choosingCalendar = false
-    var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            JottieSection(title: "People in this conversation") {
-                Text("Give each detected voice a name and job title. Names also appear in the transcript. A shared remote channel may contain several people.")
-                    .font(JottieStyle.font(13)).foregroundStyle(JottieStyle.muted).lineSpacing(7)
-            }
-            JottieSection(title: "Calendar and directory context", icon: "calendar") {
-                Text(meeting.calendarContext.map { "\($0.title) · \($0.calendarTitle)" } ?? (meeting.participants.isEmpty ? "No calendar invitees are attached to this recording." : "\(meeting.participants.count) calendar invitees attached."))
-                    .font(JottieStyle.font(13)).foregroundStyle(JottieStyle.muted)
-                if !meeting.participants.isEmpty { Text(meeting.participants.joined(separator: "; ")).font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted).textSelection(.enabled) }
-                HStack {
-                    Button("Find / change calendar event") { choosingCalendar = true }
-                    Button("Refresh directory matches") { Task { await model.refreshPeople(for: meeting) } }.disabled(meeting.participants.isEmpty)
-                }.buttonStyle(JottieButtonStyle(kind: .outline, compact: true))
-                if meeting.speakerLabels.contains("them") {
-                    Text(meeting.sourceMetadata?["speakerSeparation"] == nil
-                        ? "‘them’ is the shared system-audio channel and may contain several people. Renaming it changes every passage on that channel. For future recordings, download Local speaker separation in Settings → Recording. Older recordings with deleted audio cannot be reliably split by voice."
-                        : "Some passages could not be assigned to one voice. ‘them’ remains an unresolved shared channel; renaming it changes all unresolved passages. Overlapping or unclear voices should stay unassigned.")
-                        .font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted).lineSpacing(5)
-                }
-            }
-            if let identities = meeting.participantContext, !identities.isEmpty {
-                JottieSection(title: "Calendar invitees · BambooHR matches") {
-                    ForEach(Array(identities.enumerated()), id: \.offset) { _, person in
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text(person.name + (person.jobTitle.map { " · " + $0 } ?? "")).font(JottieStyle.font(13, .medium))
-                            Text("Matched by " + person.matchedBy + " · Directory synced " + person.syncedAt.formatted(date: .abbreviated, time: .omitted))
-                                .font(JottieStyle.font(11)).foregroundStyle(JottieStyle.muted)
-                        }
-                    }
-                    Text("An invitation does not confirm attendance or identify a speaker channel.").font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted)
-                }
-            }
-            ForEach(meeting.speakerLabels, id: \.self) { label in
-                VStack(alignment: .leading, spacing: 16) {
-                    Label(label, systemImage: "person.2").font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted)
-                    HStack(alignment: .top, spacing: 16) {
-                        speakerField("Name", label: label, values: $names)
-                        speakerField("Job title", label: label, values: $roles)
-                    }
-                    ForEach(Array((meeting.analysis?.analysis.speakerCandidates ?? []).filter { $0.label == label }.enumerated()), id: \.offset) { _, candidate in
-                        HStack {
-                            Text("Unconfirmed: \(candidate.name)").font(JottieStyle.font(11)).foregroundStyle(JottieStyle.muted)
-                            Spacer()
-                            Button("Use name") {
-                                names[label] = candidate.name
-                                let people = (meeting.participantContext ?? []).filter { LibraryStore.normalise($0.name) == LibraryStore.normalise(candidate.name) }
-                                if people.count == 1 { roles[label] = people.first?.jobTitle }
-                                saved = false
-                            }.buttonStyle(JottieButtonStyle(kind: .outline, compact: true)).help(candidate.evidence.map(\.quote).joined(separator: "\n"))
-                        }
-                    }
-                }.padding(16).overlay { RoundedRectangle(cornerRadius: 12).stroke(JottieStyle.border, lineWidth: 1) }
-            }
-            HStack {
-                Button {
-                    Task {
-                        do { try await model.store.setSpeakers(names: names, roles: roles, meetingID: meeting.id); await model.reload(); saved = true }
-                        catch { model.message = error.localizedDescription }
-                    }
-                } label: { Label(saved ? "Saved" : "Save speakers", systemImage: saved ? "checkmark" : "person.crop.circle.badge.checkmark") }
-                    .buttonStyle(JottieButtonStyle(kind: .primary))
-                Text(saved ? "Speaker details saved." : "Changes apply to this meeting.").font(JottieStyle.font(11)).foregroundStyle(JottieStyle.muted)
-            }
-            Text("Source utterances stay unchanged. Regenerate analysis to apply corrected names to a new summary. Directory matches are invitee context, not verified speakers. Use a candidate only when the transcript identifies the voice.").font(JottieStyle.font(11)).foregroundStyle(JottieStyle.muted).lineSpacing(5)
-        }.onAppear { names = meeting.speakerNames; roles = meeting.speakerRoles ?? [:] }
-            .sheet(isPresented: $choosingCalendar) { MeetingCalendarPicker(model: model, meeting: meeting) }
-    }
-    private func speakerField(_ title: String, label: String, values: Binding<[String: String]>) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(JottieStyle.font(12, .medium))
-            TextField(title == "Name" ? label : "e.g. Product designer", text: Binding(get: { values.wrappedValue[label] ?? "" }, set: { values.wrappedValue[label] = $0; saved = false }))
-                .textFieldStyle(JottieInputStyle()).accessibilityLabel("\(label) \(title)")
-        }.frame(maxWidth: .infinity)
-    }
-}
 
 struct FlowLayout: Layout {
     var spacing: CGFloat = 6

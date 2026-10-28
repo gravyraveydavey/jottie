@@ -153,6 +153,12 @@ public actor LibraryStore: MeetingRepository {
             try Self.directory(dir.appendingPathComponent("Analysis"))
             try write(analysis, dir.appendingPathComponent("Analysis/\(analysis.id).json"))
         }
+        if let assignments = meeting.speakerAttributions {
+            let history = dir.appendingPathComponent("SpeakerHistory")
+            try Self.directory(history)
+            let bytes = try Codec.encode(assignments)
+            try bytes.write(to: history.appendingPathComponent(Codec.hash(bytes) + ".json"), options: .atomic)
+        }
         try write(meeting.segments, dir.appendingPathComponent("transcript.json"))
         try Data(meeting.transcript.utf8).write(to: dir.appendingPathComponent("transcript.md"), options: .atomic)
         try Data(meeting.markdown.utf8).write(to: dir.appendingPathComponent("meeting.md"), options: .atomic)
@@ -227,6 +233,21 @@ public actor LibraryStore: MeetingRepository {
             try commit(value)
         }
     }
+    public func setSpeakerAssignment(segmentIDs: [String], name: String, role: String?, employeeID: String?, meetingID: UUID, expectedRevision: String? = nil) throws {
+        try locked {
+            var value = try meeting(meetingID)
+            guard expectedRevision == nil || expectedRevision == value.transcriptRevision else { throw JottieError.conflict("Transcript changed while correcting speakers. Reopen the correction and retry.") }
+            let ids = Set(value.segments.map(\.id))
+            guard !segmentIDs.isEmpty, Set(segmentIDs).isSubset(of: ids) else { throw JottieError.invalid("Unknown transcript passage.") }
+            var assignments = value.speakerAttributions ?? [:]
+            for id in segmentIDs {
+                assignments[id] = SpeakerAttribution(name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+                    jobTitle: role, employeeID: employeeID, method: "manual")
+            }
+            value.speakerAttributions = assignments
+            try commit(value)
+        }
+    }
     public func setCalendarContext(_ context: CalendarEventContext, meetingID: UUID) throws {
         try locked {
             var meeting = try self.meeting(meetingID)
@@ -256,6 +277,8 @@ public actor LibraryStore: MeetingRepository {
         try locked {
             var value = try meeting(id)
             guard value.transcriptRevision == revision.transcriptRevision else { throw JottieError.conflict("Transcript changed during analysis.") }
+            try revision.analysis.validate(segments: value.segments)
+            value = SpeakerReconciliation.applying(revision, to: value)
             value.analysis = revision
             if !value.manuallyFiled {
                 let tag = revision.analysis.primaryTag.map(Self.normalise)
@@ -531,7 +554,7 @@ public actor LibraryStore: MeetingRepository {
         }
     }
     /// Copies only prepared text/metadata; never traverses source audio or logs.
-    @discardableResult public func importAmanu(_ directory: URL) throws -> Meeting {
+    @discardableResult public func importAmanu(_ directory: URL, defaultSpeakerName: String? = nil) throws -> Meeting {
         struct Source: Decodable {
             struct Part: Decodable { var speaker: String; var start_ms: Int; var end_ms: Int; var text: String }
             var segments: [Part]
@@ -569,6 +592,11 @@ public actor LibraryStore: MeetingRepository {
            let speakers = names["speakers"] as? [String: [String: Any]] {
             value.speakerNames = speakers.compactMapValues { $0["name"] as? String }
         }
+        if let name = defaultSpeakerName?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty,
+           value.segments.contains(where: { $0.speaker == "me" }), value.speakerNames["me"]?.isEmpty != false {
+            value.speakerNames["me"] = name
+        }
+
         return try locked {
             guard try !retiredSources().contains(sourceID) else { throw JottieError.conflict("This source is in Jottie Trash or was deleted.") }
             func keepOriginal(_ id: UUID) throws {
@@ -582,6 +610,9 @@ public actor LibraryStore: MeetingRepository {
                 try keepOriginal(existing.id)
                 var changed = false
                 if existing.transcriptRevision != value.transcriptRevision {
+                    existing.speakerAttributions = existing.speakerAttributions?.filter { id, attribution in
+                        attribution.method == "manual" && existing.segments.first(where: { $0.id == id }) == value.segments.first(where: { $0.id == id })
+                    }
                     existing.segments = value.segments; existing.transcriptRevision = value.transcriptRevision; existing.analysis = nil
                     // Preserve user corrections for channels that still exist; source naming fills only missing names.
                     let labels = Set(value.segments.map(\.speaker))

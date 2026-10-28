@@ -53,6 +53,7 @@ public struct CapturePresentation: Equatable {
     @Published public var bambooStatus = "Not connected"
     @Published public var syncingBamboo = false
     @Published public var bambooKey = ""
+    @Published public var directoryPeople: [DirectoryPerson] = []
     public var captureSettings: CaptureSettingsController?
     @Published public var hits: [SearchHit] = []
     @Published public var folders: [Folder] = []
@@ -357,12 +358,27 @@ public struct CapturePresentation: Equatable {
             else { message = "Calendar context attached. Regenerate explicitly to update the summary." }
         } catch { message = error.localizedDescription }
     }
+    public func loadDirectoryPeople() async {
+        guard savedSettings.bambooEnabled, let company = try? BambooHR.company(savedSettings.bambooCompany) else { directoryPeople = []; return }
+        do { directoryPeople = try await PeopleDirectory(root: store.root).snapshot(company: company).people }
+        catch { message = error.localizedDescription }
+    }
+    public func saveAliases(_ text: String, for person: DirectoryPerson) async {
+        do {
+            let company = try BambooHR.company(savedSettings.bambooCompany)
+            let directory = try PeopleDirectory(root: store.root)
+            try await directory.setAliases(text.components(separatedBy: ","), employeeID: person.id, company: company)
+            await loadDirectoryPeople()
+            message = "Aliases saved locally. Regenerate a meeting to use them in new analysis."
+        } catch { message = error.localizedDescription }
+    }
     public func refreshBambooStatus() async {
         guard let company = try? BambooHR.company(settings.bambooCompany) else { bambooStatus = "Enter a company address to connect."; return }
         do {
             let directory = try PeopleDirectory(root: store.root)
             let snapshot = try await directory.snapshot(company: company)
             guard (try? BambooHR.company(settings.bambooCompany)) == company else { return }
+            directoryPeople = snapshot.people
             bambooStatus = snapshot.syncedAt.map { "\(snapshot.people.count) people · Last synced \($0.formatted(date: .abbreviated, time: .shortened))" } ?? "Not synced yet"
         } catch { bambooStatus = error.localizedDescription }
     }

@@ -94,8 +94,12 @@ public actor JottieServer {
         case "get_transcript":
             let meeting = try await store.meeting(uuid("meetingID"))
             let parts = Array(meeting.segments.dropFirst(offset).prefix(limit))
+            let displayNames = meeting.displaySpeakerNames
             result = ["meetingID": meeting.id.uuidString, "revision": meeting.transcriptRevision,
                       "segments": try json(parts), "speakerNames": meeting.speakerNames,
+                      "speakerAttributions": try json((meeting.speakerAttributions ?? [:]).filter { key, _ in parts.contains { $0.id == key } }),
+                      "displayNames": Dictionary(uniqueKeysWithValues: parts.map { ($0.id, displayNames[$0.id] ?? "Unknown speaker") }),
+                      "speakerRevision": meeting.speakerRevision,
                       "nextCursor": offset + parts.count < meeting.segments.count ? String(offset + parts.count) as Any : NSNull()]
         case "list_folders":
             let all = try await store.folders().sorted { $0.id.uuidString < $1.id.uuidString }

@@ -29,7 +29,7 @@ import JottieMCP
             let store = try LibraryStore(root: libraryRoot)
             let account = MicrosoftAccount()
             let publisher = try GraphPublisher(tokens: account, root: libraryRoot)
-            let coordinator = try KnowledgeCoordinator(store: store, publisher: publisher)
+            let coordinator = try KnowledgeCoordinator(store: store, publisher: publisher, defaultSpeakerName: { SpeakerNamer.ownerName()?.name })
             let model = LibraryViewModel(store: store, coordinator: coordinator, account: account, publisher: publisher)
             model.onCaptureSettings = onCaptureSettings; model.onRecord = onRecord
             model.onPause = onPause; model.onAutoRecord = onAutoRecord; model.onLive = onLive
@@ -108,7 +108,7 @@ import JottieMCP
                         guard FileManager.default.fileExists(atPath: dir.appendingPathComponent("transcript.json").path),
                               !TranscriptVersions.isRequested(dir) else { continue }
                         guard try await store.shouldImportAmanu(dir) else { continue }
-                        _ = try await store.importAmanu(dir)
+                        _ = try await store.importAmanu(dir, defaultSpeakerName: SpeakerNamer.ownerName()?.name)
                     }
                 }
                 await refreshBambooIfDue(store: store)
@@ -144,7 +144,7 @@ import JottieMCP
             if let library { store = library } else {
                 store = try LibraryStore(root: Home.current.url.appendingPathComponent("Library/Application Support/Jottie"))
             }
-            _ = try await store.importAmanu(dir)
+            _ = try await store.importAmanu(dir, defaultSpeakerName: SpeakerNamer.ownerName()?.name)
             schedule()
         } catch { errorMessage = error.localizedDescription }
     }
@@ -232,7 +232,7 @@ struct LibraryCommand: ParsableCommand {
             let store = try LibraryStore(root: root)
             let account = MicrosoftAccount()
             let publisher = try GraphPublisher(tokens: account, root: root)
-            let coordinator = try KnowledgeCoordinator(store: store, publisher: publisher)
+            let coordinator = try KnowledgeCoordinator(store: store, publisher: publisher, defaultSpeakerName: { SpeakerNamer.ownerName()?.name })
             let model = LibraryViewModel(store: store, coordinator: coordinator, account: account, publisher: publisher)
             let app = NSApplication.shared
             app.setActivationPolicy(.regular)

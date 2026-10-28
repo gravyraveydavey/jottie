@@ -1,4 +1,5 @@
 import SwiftUI
+import JottieModels
 
 /// UI-only contracts; the executable adapts the existing capture configuration and permissions.
 public struct CaptureSetting: Identifiable, Equatable {
@@ -46,6 +47,7 @@ public struct CaptureModelItem: Identifiable {
 }
 @MainActor struct CaptureSettingsPane: View {
     @ObservedObject var controller: CaptureSettingsController
+    var people: [DirectoryPerson] = []
     @ViewState private var deleting: CaptureModelItem?
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
@@ -85,7 +87,7 @@ public struct CaptureModelItem: Identifiable {
             }
             ForEach(controller.sections) { section in
                 JottieSection(title: section.title) {
-                    ForEach(section.fields) { field in CaptureSettingRow(field: field, controller: controller).id(field.id) }
+                    ForEach(section.fields) { field in CaptureSettingRow(field: field, controller: controller, people: people).id(field.id) }
                 }
                 JottieRule()
             }
@@ -100,9 +102,10 @@ public struct CaptureModelItem: Identifiable {
             }
     }
 }
-@MainActor private struct CaptureSettingRow: View {
+@MainActor struct CaptureSettingRow: View {
     let field: CaptureSetting
     @ObservedObject var controller: CaptureSettingsController
+    var people: [DirectoryPerson] = []
     @ViewState private var draft = ""
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -124,6 +127,12 @@ public struct CaptureModelItem: Identifiable {
                     if field.kind == .multiline { TextEditor(text: $draft).frame(height: 100).font(JottieStyle.font(13)) }
                     else { TextField(field.placeholder, text: $draft).onSubmit { _ = controller.commit(field.id, draft) } }
                     Button("Apply") { _ = controller.commit(field.id, draft) }.disabled(draft == field.value || controller.busy)
+                }
+            }
+            if field.id == "user_name", !draft.isEmpty {
+                ForEach(Array(people.filter { person in NameAliases.all(name: person.name, aliases: person.aliases).contains { NameAliases.normalise($0).contains(NameAliases.normalise(draft)) } }.prefix(8))) { person in
+                    Button(person.name + (person.jobTitle.map { " · " + $0 } ?? "")) { draft = person.name }
+                        .buttonStyle(.plain).font(JottieStyle.font(12)).foregroundStyle(JottieStyle.accent)
                 }
             }
             Text(field.help).font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted).fixedSize(horizontal: false, vertical: true)

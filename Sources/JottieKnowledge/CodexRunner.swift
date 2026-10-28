@@ -151,7 +151,9 @@ enum Schemas {
                 "actions": array(finding(["proposed", "committed", "in_progress", "blocked", "completed", "unclear"])),
                 "questions": array(finding(["open", "resolved", "unclear"])), "uncertainties": array(string),
                 "sensitivity": ["type": "string", "enum": ["normal", "sensitive", "uncertain"]]
-                , "speakerCandidates": array(object(["label": string, "name": string, "evidence": array(evidence)]))
+                , "speakerCandidates": array(object(["label": string, "name": string, "evidence": array(evidence),
+                    "segmentIDs": array(string), "confidence": ["type": "number", "minimum": 0, "maximum": 1],
+                    "basis": array(["type": "string", "enum": ["self_introduction", "direct_address_response", "elimination", "role_context", "alias", "voice_consistency"]])]))
             ]))
         }
     }

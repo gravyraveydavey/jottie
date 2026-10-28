@@ -47,7 +47,7 @@ import JottieKnowledge
     #expect(saved.segments == original.segments && saved.transcriptRevision == original.transcriptRevision)
     await #expect(throws: JottieError.self) { try await store.setSpeakers(names: ["unknown": "Name"], roles: [:], meetingID: original.id) }
     try await store.setSpeakers(names: ["remote": " "], roles: [:], meetingID: original.id)
-    #expect(try await store.meeting(original.id).transcript.contains("remote:"))
+    #expect(try await store.meeting(original.id).transcript.contains("Speaker 1:"))
     let oldData = try Codec.encode(original)
     let oldMeeting = try Codec.decode(Meeting.self, from: oldData)
     #expect(oldMeeting.starred == nil && oldMeeting.speakerRoles == nil)

@@ -26,14 +26,14 @@ import JottieKnowledge
                     case "Summaries": prompts
                     case "General": general
                     case "Recording":
-                        if let controller = model.captureSettings { CaptureSettingsPane(controller: controller) }
+                        if let controller = model.captureSettings { CaptureSettingsPane(controller: controller, people: model.directoryPeople) }
                         else { Text("Recording controls are available in the full Jottie app. This library-only window does not run the capture engine.").foregroundStyle(JottieStyle.muted) }
                     case "Integrations":
-                        VStack(alignment: .leading, spacing: 32) { calendars; JottieRule(); bamboo }
+                        VStack(alignment: .leading, spacing: 32) { calendars; JottieRule(); bamboo; DirectoryAliasSettings(model: model) }
                     case "Microsoft": microsoft
                     default: mcp
                     }
-                }
+                }.task { await model.loadDirectoryPeople(); model.captureSettings?.refresh() }
                 JottieRule()
                 HStack(spacing: 12) {
                     Button {
@@ -92,6 +92,13 @@ import JottieKnowledge
     }
     private var general: some View {
         VStack(alignment: .leading, spacing: 24) {
+            if let controller = model.captureSettings,
+               let field = controller.sections.flatMap(\.fields).first(where: { $0.id == "user_name" }) {
+                JottieSection(title: "Your speaker identity", icon: "person.crop.circle") {
+                    CaptureSettingRow(field: field, controller: controller, people: model.directoryPeople)
+                    description("Used for your microphone track on future recordings. Choose a BambooHR suggestion and Apply, or enter your preferred name.")
+                }
+            }
             JottieSection(title: "Codex summaries and organisation") {
                 Toggle("Automatically analyse meetings with my signed-in Codex CLI", isOn: $model.settings.analysisEnabled).toggleStyle(.switch)
                 description("Transcription stays on this Mac. Codex receives meeting text using your subscription; usage limits apply. There is no API fallback.")
