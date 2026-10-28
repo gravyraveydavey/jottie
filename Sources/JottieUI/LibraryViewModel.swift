@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import EventKit
+import UniformTypeIdentifiers
 import JottieModels
 import JottieLibrary
 import JottieKnowledge
@@ -34,11 +35,23 @@ public struct CapturePresentation: Equatable {
     public var transcription: String?
     public var configProblem: String?
     public var mediaImport: String?
+    public var importResult: String?
+    public var transcriptionItems: [CaptureQueueItem] = []
     public init() {}
     public var isRecording: Bool { state != .idle }
     public var label: String {
         let name = state == .idle ? "Ready to record" : state == .paused ? "Recording paused" : "Recording"
         return elapsed.map { "\(name) · \($0)" } ?? name
+    }
+}
+
+public struct CaptureQueueItem: Identifiable, Equatable, Sendable {
+    public let id: String
+    public let title: String
+    public let state: String
+    public let detail: String
+    public init(id: String, title: String, state: String, detail: String) {
+        self.id = id; self.title = title; self.state = state; self.detail = detail
     }
 }
 
@@ -95,6 +108,8 @@ public struct CapturePresentation: Equatable {
     public var onPause: (() -> Void)?
     public var onAutoRecord: (() -> Void)?
     public var onLive: ((Bool) -> Void)?
+    public var onImportMedia: (([URL]) -> Void)?
+    public var onRetryTranscription: (() -> Void)?
     public init(store: LibraryStore, coordinator: KnowledgeCoordinator, account: MicrosoftAccount, publisher: GraphPublisher) {
         self.store = store; self.coordinator = coordinator; self.account = account; self.publisher = publisher
         persistPresentation = store.root.standardizedFileURL == LibraryStore.defaultRoot.standardizedFileURL
@@ -281,14 +296,33 @@ public struct CapturePresentation: Equatable {
     }
     public func importTranscripts() {
         let panel = NSOpenPanel()
+        panel.title = "Import into Jottie"; panel.prompt = "Import"
         panel.canChooseDirectories = true; panel.canChooseFiles = true; panel.allowsMultipleSelection = true
-        panel.message = "Choose folders containing transcripts, or individual Markdown, text or Word documents (.md, .txt, .doc, .docx). Subfolders are included. Originals are preserved."
+        panel.allowedContentTypes = [.audio, .movie, .plainText, .text] + ["md", "markdown", "doc", "docx"].compactMap { UTType(filenameExtension: $0) }
+        panel.message = "Choose audio or video files, transcript documents, or folders containing Markdown, text or Word transcripts. Transcript subfolders are included. Originals are preserved."
         guard panel.runModal() == .OK else { return }
-        let urls = panel.urls
+        importURLs(panel.urls)
+    }
+    /// One selection can contain documents and media. Only explicitly selected
+    /// media files enter capture; folder traversal remains text-only.
+    public func importURLs(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        navigate("queue")
+        let media = urls.filter { url in
+            guard (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) != true,
+                  let type = UTType(filenameExtension: url.pathExtension) else { return false }
+            return type.conforms(to: .audio) || type.conforms(to: .movie)
+        }
+        let documents = urls.filter { !media.contains($0) }
+        if !media.isEmpty {
+            if let onImportMedia { onImportMedia(media) }
+            else { message = "Audio and video import is available in the full Jottie app. Open Jottie without the library-only command to transcribe these files." }
+        }
+        guard !documents.isEmpty else { return }
         Task {
             working = true; defer { working = false }
             do {
-                let report = try await store.importTranscripts(from: urls)
+                let report = try await store.importTranscripts(from: documents)
                 message = "Imported/updated \(report.imported) transcripts; \(report.unchanged) unchanged, \(report.failures.count) could not be read. Originals preserved."
                     + report.failures.prefix(3).map { "\n" + $0 }.joined()
                 await coordinator.run(); await reload()

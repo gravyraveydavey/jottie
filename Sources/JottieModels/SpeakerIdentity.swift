@@ -228,6 +228,7 @@ public enum SpeakerReconciliation {
             let own = meeting.segments.filter { $0.speaker == candidate.label }
             let anchors = Set(own.filter(anchored).map(\.id))
             let separated = candidate.label.hasPrefix("them ") || candidate.label.hasPrefix("speaker ")
+                || (candidate.label.hasPrefix("me ") && candidate.label != "me unknown")
             let competing = (revision.analysis.speakerCandidates ?? []).contains { other in
                 guard other.label == candidate.label else { return false }
                 if let person { return !NameAliases.all(name: person.name, aliases: person.aliases).contains { NameAliases.normalise($0) == NameAliases.normalise(other.name) } }

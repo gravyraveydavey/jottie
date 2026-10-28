@@ -314,8 +314,8 @@ enum SettingsSchema {
                       "Выключено — только запись; хук on_stop всё равно срабатывает."),
                   .toggle, default: true, askedInSetup: true),
         ] + localModelEntries + [
-            Entry(["transcription", "separate_speakers"], localised("Separate remote voices locally", "Разделять голоса собеседников локально"),
-                  localised("Distinguish voices sharing the remote audio channel. Download Local speaker separation models first. Audio remains on this Mac; incomplete separation keeps audio for retry. Existing text-only meetings cannot be separated without their audio.",
+            Entry(["transcription", "separate_speakers"], localised("Separate voices locally", "Разделять голоса локально"),
+                  localised("Distinguish voices in microphone, remote audio and imported recordings. Works with Parakeet and Whisper; changing the recognizer alone does not add speaker separation. Download Local speaker separation models first. Incomplete separation keeps audio for retry. Existing text-only meetings need their original audio.",
                             "Различать голоса в общей дорожке собеседников. Сначала скачайте локальные модели разделения голосов. Звук остаётся на маке; при ошибке он сохраняется для повторной попытки. Без исходного звука разделить старую текстовую запись нельзя."),
                   .toggle, default: false),
             Entry(["transcript_echo_filter"],

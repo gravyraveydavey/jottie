@@ -1,0 +1,21 @@
+# Media import and speaker testing
+
+The manager's top Import button and File → Import accept multiple audio/video files together with transcript documents. After selection the manager opens Queue. Folder selection recursively imports text/Word transcripts only; media must be selected explicitly. The library-only command reports that audio processing requires the full app.
+
+Media goes through the existing native AVFoundation importer: inspect an audio track, hash the source for deduplication, extract/downmix the first audio track to a private staged mono M4A, write session metadata, then hand a complete session to the ordinary transcription queue. A movie's video track is not retained. No ffmpeg or Python runtime is required. Files must use a codec/container macOS can decode; unsupported or silent videos are reported individually and do not stop the batch. The original file is never moved, edited or deleted.
+
+Queue shows conversion status, import failures/duplicates, and unfinished transcription sessions, separately from analysis/knowledge/publication jobs. Failed/deferred sessions retain audio and can be retried. The filesystem remains the durable transcription queue; completed normalized sessions resume after restart. An interrupted conversion is unpublished staging and must be selected again. Conversion result messages are session-local, not a durable import history.
+
+Both Parakeet and Whisper use the same optional Community-1 speaker-separation adapter. Switching recognizers alone does not add diarization. Parakeet supplies word timings; the current Whisper adapter supplies segment timings. A coarse segment spanning several voices remains unresolved unless one voice clearly dominates: the app does not guess where to cut its text. WhisperX adds a distinct word-alignment and diarization pipeline and is not the Whisper option in Jottie.
+
+With separation enabled, microphone and system tracks are both processed. Remote voices retain separate `them N` labels. One confidently detected microphone voice retains `me` and the configured owner name. Multiple microphone voices get `me N`; uncertain microphone passages get `me unknown`, so neither automatically inherits the owner's identity. Imported recordings use anonymous `speaker N` labels. Track-local IDs are not cross-track voice identities: echo filtering still removes duplicate playback speech, but the app does not claim a shared person across tracks without evidence/correction.
+
+The anonymous labels feed the existing calendar/BambooHR/text-evidence reconciliation. A stable microphone cluster can propagate an anchored identity under the same confidence/evidence rules as a remote cluster; unresolved passages cannot. Similar voices, crosstalk and short turns can still cause merges or splits. Voice-separation accuracy must be judged on recordings with known participants and speaker turns, separately from synthetic pipeline tests.
+
+Transcription logs report model cluster counts and assigned/unresolved segment counts per track, without adding transcript text or voice embeddings. Existing text-only meetings cannot gain acoustic diarization: re-import the original audio/video if it is available. Successful durable transcription deletes only Jottie's normalized temporary audio; summary success is not required for cleanup.
+
+The supplied whisper-web reference uses Transformers.js in a worker. Its useful separation of media decoding and recognition already has native equivalents in Jottie. No source code or dependency from that project is required for this integration.
+
+## Automated validation — 28 October 2026
+
+The microphone regression tests first failed against the previous implementation, then passed with the fix. The full serial Swift suite passed (777 inherited/capture tests and 61 Jottie tests). Coverage includes microphone and remote namespaces, retained owner identity for one mic voice, unresolved mic passages, voice-evidence propagation, multi-file UI routing, Queue states, and native movie audio extraction with byte-for-byte preservation of the source. Existing capture/recovery, failed-transcription retention and durable cleanup tests also passed. These checks do not establish diarization accuracy on real meetings.

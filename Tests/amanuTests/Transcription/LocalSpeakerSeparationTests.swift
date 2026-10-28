@@ -53,6 +53,21 @@ import Testing
         #expect(result.map(\.start_ms) == [500,1500])
         #expect(result.map(\.text) == ["One.", "Two."])
     }
+    @Test(.freshHome) func sharedMicrophoneSeparatesWithoutCallingEveryVoiceTheOwner() async throws {
+        let root = try recording()
+        try FileManager.default.copyItem(at: root.appendingPathComponent("system.caf"), to: root.appendingPathComponent("mic.caf"))
+        try Data(#"{"files":{"mic":"mic.caf","system":"system.caf"},"started":"2026-10-27T09:00:00Z"}"#.utf8).write(to: root.appendingPathComponent("meta.json"))
+        let inputs = TranscriptionInputs(session: root, audio: root, meta: try SessionMeta.read(from: root), engine: MockEngine(), separateSpeakers: true,
+            speakerIntervals: { _ in [SpeakerInterval(speaker: "x", start: 0, end: 1), SpeakerInterval(speaker: "y", start: 1, end: 2)] })
+        let result = try await inputs.segments()
+        #expect(Set(result.map(\.speaker)) == ["me 1", "me 2", "them 1", "them 2"])
+    }
+    @Test func oneMicrophoneVoiceKeepsOwnerButAmbiguousSpeechDoesNot() {
+        let intervals = [SpeakerInterval(speaker: "a", start: 0, end: 1)]
+        let source = [TranscriptSegment(start: 0, end: 1, text: "Hello"), TranscriptSegment(start: 2, end: 3, text: "Uncertain")]
+        let result = LocalSpeakerSeparation.applying(intervals, to: source, side: "me")
+        #expect(result.map(\.speaker) == ["me", "me unknown"])
+    }
     @Test(.freshHome) func missingSpeakerModelsKeepRecordingForRetry() async throws {
         let root = try recording()
         Config.update(path: ["transcription", "separate_speakers"], value: true)

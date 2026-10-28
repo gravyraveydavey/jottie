@@ -159,6 +159,34 @@ struct MediaNormalizerTests {
         #expect(left.isEmpty)
     }
 
+    @Test("A movie's audio is extracted locally without modifying the movie")
+    func videoWithAudio() async throws {
+        let dir = try Self.folder("video-audio")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let video = dir.appendingPathComponent("silent.mov"), audio = dir.appendingPathComponent("tone.wav")
+        try await Self.silentMovie(video)
+        try Self.tone(audio, seconds: 0.3, rate: 16_000)
+        let composition = AVMutableComposition()
+        for (url, type) in [(video, AVMediaType.video), (audio, AVMediaType.audio)] {
+            let asset = AVURLAsset(url: url)
+            let source = try #require(try await asset.loadTracks(withMediaType: type).first)
+            let target = try #require(composition.addMutableTrack(withMediaType: type, preferredTrackID: kCMPersistentTrackID_Invalid))
+            try target.insertTimeRange(CMTimeRange(start: .zero, duration: CMTime(seconds: 0.3, preferredTimescale: 600)), of: source, at: .zero)
+        }
+        let movie = dir.appendingPathComponent("interview.mov")
+        let exporter = try #require(AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetPassthrough))
+        exporter.outputURL = movie; exporter.outputFileType = .mov
+        await withCheckedContinuation { continuation in exporter.exportAsynchronously { continuation.resume() } }
+        #expect(exporter.status == .completed)
+        let original = try Data(contentsOf: movie)
+        let result = await MediaImportCoordinator(root: dir.appendingPathComponent("Capture")).importFiles([movie])
+        #expect(result.failures.isEmpty)
+        let session = try #require(result.imported.first?.session)
+        let normalized = try AVAudioFile(forReading: session.appendingPathComponent("source.m4a"))
+        #expect(normalized.length > 0 && normalized.processingFormat.channelCount == 1)
+        #expect(try Data(contentsOf: movie) == original)
+    }
+
     /// The same files through the importer, which owns the staging folder.
     @Test("Every kind of bad file fails in the importer with no staging folder left")
     func importerLeavesNoStaging() async throws {

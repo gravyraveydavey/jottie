@@ -77,7 +77,7 @@ import JottieUI
         if Platform.supportsLocalModels {
             let speakers = LocalSpeakerModels()
             controller.models.append(CaptureModelItem(id: "local-speakers", title: "Local speaker separation",
-                status: speakers.isReady ? "Downloaded · Anonymous voices, not verified identities" : "Not downloaded · Required to distinguish voices in the remote channel", installed: speakers.isReady))
+                status: speakers.isReady ? "Downloaded · Separates microphone, remote and imported voices" : "Not downloaded · Required to distinguish voices sharing an audio track", installed: speakers.isReady))
         }
     }
     private func permissionLabel(_ state: SetupPermissions.State) -> String {

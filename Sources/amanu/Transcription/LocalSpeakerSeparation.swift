@@ -68,8 +68,12 @@ enum LocalSpeakerSeparation {
             .sorted { $0.start == $1.start ? $0.speaker < $1.speaker : $0.start < $1.start }
         var names: [String: String] = [:]
         for interval in ordered where names[interval.speaker] == nil { names[interval.speaker] = "\(side) \(names.count + 1)" }
+        // One mic voice retains the configured owner's label. A shared mic
+        // must never assign every acoustic cluster that same identity.
+        if side == "me", names.count == 1, let key = names.keys.first { names[key] = "me" }
         func label(start: Double, end: Double) -> String? {
-            guard start.isFinite, end.isFinite, end > start else { return nil }
+            let unknown: String? = side == "me" ? "me unknown" : nil
+            guard start.isFinite, end.isFinite, end > start else { return unknown }
             var ranges: [String: [(Double, Double)]] = [:]
             for interval in ordered where interval.start < end && interval.end > start {
                 ranges[interval.speaker, default: []].append((max(start, interval.start), min(end, interval.end)))
@@ -83,7 +87,7 @@ enum LocalSpeakerSeparation {
             }
             let ranked = overlap.sorted { $0.value == $1.value ? $0.key < $1.key : $0.value > $1.value }
             guard let first = ranked.first, first.value / (end - start) >= 0.65,
-                  first.value - (ranked.dropFirst().first?.value ?? 0) >= (end - start) * 0.2 else { return nil }
+                  first.value - (ranked.dropFirst().first?.value ?? 0) >= (end - start) * 0.2 else { return unknown }
             return names[first.key]
         }
         var output: [TranscriptSegment] = []

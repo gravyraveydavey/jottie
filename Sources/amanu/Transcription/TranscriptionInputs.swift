@@ -170,11 +170,14 @@ struct TranscriptionInputs {
             var segments: [TranscriptSegment]
             do {
                 segments = try await engine.transcribe(file)
-                if separateSpeakers && (track.speaker == "them" || meta.isSingleSource) && !segments.isEmpty {
+                if separateSpeakers && !segments.isEmpty {
                     log("separating local speaker voices in \(track.file)")
                     let intervals = try await speakerIntervals(file)
                     guard !intervals.isEmpty else { throw LocalSpeakerModels.ModelError.invalidParameters }
                     segments = LocalSpeakerSeparation.applying(intervals, to: segments, side: track.speaker)
+                    let clusters = Set(intervals.map(\.speaker)).count
+                    let unresolved = segments.filter { $0.speaker == nil || $0.speaker == "me unknown" }.count
+                    log("speaker separation (\(track.speaker)): \(clusters) voice clusters; \(segments.count - unresolved) assigned, \(unresolved) unresolved segments")
                 }
             } catch {
                 if let temporary { try? FileManager.default.removeItem(at: temporary) }
@@ -185,7 +188,7 @@ struct TranscriptionInputs {
             let offset = TimeInterval(track.offsetMs) / 1000
             merged += segments.map {
                 Transcript.Segment(
-                    speaker: separateSpeakers && (track.speaker == "them" || meta.isSingleSource) ? ($0.speaker ?? track.speaker) : track.speaker,
+                    speaker: separateSpeakers ? ($0.speaker ?? (track.speaker == "me" ? "me unknown" : track.speaker)) : track.speaker,
                     start_ms: Int(($0.start + offset) * 1000),
                     end_ms: Int(($0.end + offset) * 1000),
                     text: $0.text

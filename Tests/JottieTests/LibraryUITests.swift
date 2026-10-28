@@ -6,6 +6,24 @@ import JottieLibrary
 import JottieKnowledge
 @testable import JottieUI
 
+@Test @MainActor func managerImportsMultipleMediaFilesAndOpensQueue() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("jottie-media-ui-\(UUID())")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let store = try LibraryStore(root: root)
+    let model = LibraryViewModel(store: store, coordinator: try KnowledgeCoordinator(store: store),
+        account: MicrosoftAccount(), publisher: try GraphPublisher(tokens: MicrosoftAccount(), root: root))
+    let sources = [URL(fileURLWithPath: "/tmp/interview.mp4"), URL(fileURLWithPath: "/tmp/discussion.wav"), URL(fileURLWithPath: "/tmp/meeting.m4a")]
+    var received: [URL] = []
+    model.onImportMedia = { received = $0 }
+    model.importURLs(sources)
+    #expect(received == sources)
+    #expect(model.location == "queue")
+    #expect(model.message == nil)
+    model.onImportMedia = nil
+    model.importURLs([sources[0]])
+    #expect(model.message?.contains("full Jottie app") == true)
+}
+
 @Test(.enabled(if: ProcessInfo.processInfo.environment["JOTTIE_RENDER_PREVIEW"] == "1"))
 @MainActor func syntheticLibraryPreview() async throws {
     _ = NSApplication.shared

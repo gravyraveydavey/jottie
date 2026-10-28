@@ -105,7 +105,7 @@ typealias ViewState<Value> = SwiftUI.State<Value>
                     navigationRow("All meetings", icon: "books.vertical", location: "all", count: model.meetings.count)
                         .dropDestination(for: String.self) { values, _ in model.drop(values, into: nil) }
                     navigationRow("Starred", icon: "star", location: "starred", count: model.meetings.filter { $0.starred == true }.count)
-                    navigationRow("Queue", icon: "checklist", location: "queue", count: model.jobs.count)
+                    navigationRow("Queue", icon: "checklist", location: "queue", count: model.jobs.count + model.capture.transcriptionItems.count)
                     navigationRow("Trash", icon: "trash", location: "trash", count: model.trash.count)
                     sidebarHeading("Folders").padding(.top, 28)
                     ForEach(visibleFolders, id: \.folder.id) { item in folderRow(item.folder, depth: item.depth) }

@@ -108,15 +108,15 @@ private func addressedCandidate(label: String = "them 1", name: String = "Dave W
     #expect(SpeakerReconciliation.applying(speakerAnalysis(meeting, candidates: [addressedCandidate()]), to: meeting).speakerAttributions == nil)
 }
 @Test func consistentSeparatedVoiceCanPropagateButNeverSharedChannel() {
-    for shared in [false, true] {
-        var meeting = speakerFixture(shared: shared)
-        let label = shared ? "them" : "them 1"
+    for label in ["them 1", "speaker 1", "me 1", "them", "me unknown"] {
+        var meeting = speakerFixture()
+        for index in meeting.segments.indices where meeting.segments[index].speaker == "them 1" { meeting.segments[index].speaker = label }
         meeting.segments.append(Segment(id: "c", speaker: label, text: "I will send the plan."))
         var candidate = addressedCandidate(label: label)
         candidate.segmentIDs = ["a", "c"]; candidate.basis?.append("voice_consistency")
         let value = SpeakerReconciliation.applying(speakerAnalysis(meeting, candidates: [candidate]), to: meeting)
         #expect(value.speakerAttributions?["a"]?.name == "David Welch")
-        #expect((value.speakerAttributions?["c"] != nil) == !shared)
+        #expect((value.speakerAttributions?["c"] != nil) == ["them 1", "speaker 1", "me 1"].contains(label))
     }
 }
 

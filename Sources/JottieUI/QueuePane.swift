@@ -26,9 +26,37 @@ import JottieLibrary
                     }.font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted)
                     ProgressView(value: Double(model.progress.completed), total: Double(max(1, model.progress.total))).tint(JottieStyle.accent)
                 }
-                if model.jobs.isEmpty {
-                    JottieEmpty(title: "Everything is up to date", message: "Pending analysis, folder context and publication jobs will appear here.", icon: "checkmark")
-                } else {
+                if let importing = model.capture.mediaImport {
+                    HStack { ProgressView().controlSize(.small); Text(importing) }
+                        .font(JottieStyle.font(13)).foregroundStyle(JottieStyle.muted)
+                }
+                if let result = model.capture.importResult {
+                    Text(result).font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted).textSelection(.enabled)
+                }
+                if !model.capture.transcriptionItems.isEmpty {
+                    VStack(alignment: .leading, spacing: 16) {
+                        HStack {
+                            Text("Transcription & speaker separation").font(JottieStyle.font(17, .semibold))
+                            Spacer()
+                            Button("Retry transcription") { model.onRetryTranscription?() }
+                                .buttonStyle(JottieButtonStyle(kind: .outline, compact: true))
+                                .disabled(model.onRetryTranscription == nil || model.capture.transcriptionItems.contains { $0.state == "Processing" })
+                        }
+                        ForEach(model.capture.transcriptionItems) { item in
+                            HStack(alignment: .top, spacing: 16) {
+                                Image(systemName: "waveform").foregroundStyle(JottieStyle.accent)
+                                VStack(alignment: .leading, spacing: 7) {
+                                    Text(item.title).font(JottieStyle.font(14, .medium))
+                                    Text(item.detail).font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted).textSelection(.enabled)
+                                }.frame(maxWidth: .infinity, alignment: .leading)
+                                JottieBadge(text: item.state, outlined: true)
+                            }.padding(16).overlay { RoundedRectangle(cornerRadius: 12).stroke(JottieStyle.border, lineWidth: 1) }
+                        }
+                    }
+                }
+                if model.jobs.isEmpty && model.capture.transcriptionItems.isEmpty && model.capture.mediaImport == nil && model.capture.transcription == nil {
+                    JottieEmpty(title: "Everything is up to date", message: "Imported recordings, transcription, analysis, folder context and publication jobs will appear here.", icon: "checkmark")
+                } else if !model.jobs.isEmpty {
                     LazyVStack(spacing: 0) {
                         ForEach(model.jobs) { job in
                             jobRow(job)

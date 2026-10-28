@@ -396,7 +396,9 @@ final class AppController {
                                   onRecord: { [weak self] in self?.toggleRecording() },
                                   onPause: { [weak self] in self?.togglePause() },
                                   onAutoRecord: { [weak self] in self?.toggleAutoRecord() },
-                                  onLive: { [weak self] enabled in self?.toggleLive(enabled) })
+                                  onLive: { [weak self] enabled in self?.toggleLive(enabled) },
+                                  onImportMedia: { [weak self] files in self?.importFiles(files) },
+                                  onRetryTranscription: { [weak self] in self?.retryImportedTranscription() })
         offerSetup()
         settingsApplier = SettingsApplier(
             apply: { [weak self] change in self?.take(change) },
@@ -512,6 +514,7 @@ final class AppController {
     /// Both menu commands end here, so there is one picker and one import
     /// pipeline regardless of where a person starts from.
     func chooseMediaToImport() {
+        if JottieBridge.shared.chooseImport() { return }
         guard let files = MediaImportPicker.choose(), !files.isEmpty else { return }
         importFiles(files)
     }
@@ -520,7 +523,20 @@ final class AppController {
     /// publishes complete filesystem sessions; only then are they handed to
     /// the ordinary transcription queue, exactly like a recording just ended.
     func importFiles(_ files: [URL]) {
+        guard !files.isEmpty else { return }
+        JottieBridge.shared.showQueue()
         if imports.add(files) { startImportRun() }
+    }
+
+    private func retryImportedTranscription() {
+        let sessions = CaptureQueueSnapshot.retryableSessions(in: root)
+        Task { [transcription] in
+            for dir in sessions {
+                if TranscriptionFailurePolicy.hasGivenUp(on: dir), !PostProcessor.markForRetranscription(dir) { continue }
+                await transcription.enqueue(dir)
+            }
+            JottieBridge.shared.showQueue()
+        }
     }
 
     /// One run of the importer: batch after batch until nothing is waiting

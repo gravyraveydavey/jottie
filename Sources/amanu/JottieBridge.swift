@@ -22,7 +22,8 @@ import JottieMCP
     private var capture = CapturePresentation()
     private init() {}
     func start(root: URL, onCaptureSettings: @escaping () -> Void, onRecord: @escaping () -> Void,
-               onPause: @escaping () -> Void, onAutoRecord: @escaping () -> Void, onLive: @escaping (Bool) -> Void) {
+               onPause: @escaping () -> Void, onAutoRecord: @escaping () -> Void, onLive: @escaping (Bool) -> Void,
+               onImportMedia: @escaping ([URL]) -> Void, onRetryTranscription: @escaping () -> Void) {
         guard !Home.runsInsideTests, library == nil else { return }
         do {
             let libraryRoot = Home.current.url.appendingPathComponent("Library/Application Support/Jottie")
@@ -33,6 +34,7 @@ import JottieMCP
             let model = LibraryViewModel(store: store, coordinator: coordinator, account: account, publisher: publisher)
             model.onCaptureSettings = onCaptureSettings; model.onRecord = onRecord
             model.onPause = onPause; model.onAutoRecord = onAutoRecord; model.onLive = onLive
+            model.onImportMedia = onImportMedia; model.onRetryTranscription = onRetryTranscription
             let nativeSettings = NativeCaptureSettings(isBusy: { [weak model] in
                 model?.capture.isRecording == true || model?.capture.transcription != nil
             })
@@ -58,7 +60,15 @@ import JottieMCP
             }
         } catch { errorMessage = error.localizedDescription }
     }
-    private func publishCapture() { window?.model.capture = capture }
+    private func publishCapture() {
+        if let captureRoot { capture.transcriptionItems = CaptureQueueSnapshot.items(in: captureRoot) }
+        window?.model.capture = capture
+    }
+    func chooseImport() -> Bool {
+        guard let window else { return false }
+        window.show(); window.model.importTranscripts(); return true
+    }
+    func showQueue() { window?.model.navigate("queue"); window?.show(); publishCapture() }
     func updateRecording(_ state: MenuBarController.State, elapsed: String?) {
         capture.state = state == .idle ? .idle : state == .paused ? .paused : .recording
         capture.elapsed = elapsed; publishCapture()
@@ -70,12 +80,14 @@ import JottieMCP
     func updateConfigProblem(_ problem: String?) { capture.configProblem = problem; publishCapture() }
     func updateTranscription(_ text: String?) { capture.transcription = text; publishCapture() }
     func updateImport(_ update: MediaImportCoordinator.Update) {
-        capture.mediaImport = "Importing \(update.index) of \(update.total): \(update.source.lastPathComponent)"
+        capture.importResult = nil
+        capture.mediaImport = MediaImportPresentation.progress(update).label
         publishCapture()
     }
     func finishImport(_ result: MediaImportCoordinator.Result) {
-        capture.mediaImport = nil; publishCapture()
-        window?.model.message = "Imported \(result.imported.count) recordings; \(result.duplicates.count) duplicates; \(result.failures.count) failed."
+        capture.mediaImport = nil
+        capture.importResult = MediaImportPresentation.finished(result).label
+        publishCapture()
     }
     func updateLive(_ snapshot: LiveTranscriptionCoordinator.Snapshot) {
         capture.liveEnabled = snapshot.isEnabled
@@ -97,6 +109,7 @@ import JottieMCP
         publishCapture()
     }
     func schedule() {
+        publishCapture()
         guard processing == nil, let store = library, let coordinator else { return }
         processing = Task {
             defer { processing = nil }
