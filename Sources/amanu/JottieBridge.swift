@@ -126,6 +126,7 @@ import JottieMCP
                 }
                 await refreshBambooIfDue(store: store)
                 try await store.reconcile()
+                await window?.model.reload()
                 await coordinator.run()
                 await window?.model.reload()
             } catch { window?.model.message = error.localizedDescription }

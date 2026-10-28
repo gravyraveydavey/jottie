@@ -62,7 +62,7 @@ import JottieLibrary
                     .font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted)
                 HStack {
                     Button("Find / change calendar event") { choosingCalendar = true }
-                    Button("Refresh directory matches") { Task { await model.refreshPeople(for: meeting) } }.disabled(meeting.participants.isEmpty)
+                    Button("Refresh directory matches") { Task { await model.refreshPeople(for: meeting) } }.disabled(meeting.directoryIdentityCandidates.isEmpty)
                 }.buttonStyle(JottieButtonStyle(kind: .outline, compact: true))
                 Text("Regenerate summary to reconcile with the latest aliases and invitation. Original utterances stay intact; manual assignments take precedence.")
                     .font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted)

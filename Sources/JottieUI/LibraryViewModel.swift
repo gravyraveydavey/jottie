@@ -378,10 +378,10 @@ public struct CaptureQueueItem: Identifiable, Equatable, Sendable {
             guard saved.bambooEnabled else { message = "Connect BambooHR in Settings → Integrations first."; return }
             let company = try BambooHR.company(saved.bambooCompany)
             let directory = try PeopleDirectory(root: store.root)
-            let matches = try await directory.matching(current.participants, company: company)
+            let matches = try await directory.matching(current.directoryIdentityCandidates, company: company)
             _ = try await store.setParticipantContext(matches, meetingID: current.id)
             await reload()
-            message = "Matched \(matches.count) of \(current.participants.count) invitees against the local directory. Summary revisions are unchanged."
+            message = "Matched \(matches.count) of \(current.directoryIdentityCandidates.count) invitation/transcript identities against the local directory. Summary revisions are unchanged."
         } catch { message = error.localizedDescription }
     }
     public func attachCalendar(_ event: CalendarEventContext, to meeting: Meeting) async {

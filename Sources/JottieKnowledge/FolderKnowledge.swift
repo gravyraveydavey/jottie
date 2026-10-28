@@ -225,7 +225,7 @@ public actor KnowledgeCoordinator {
         var context: [ParticipantIdentity] = []
         if settings.bambooEnabled, let company = try? BambooHR.company(settings.bambooCompany) {
             let directory = try PeopleDirectory(root: store.root)
-            context = try await directory.matching(value.participants, company: company)
+            context = try await directory.matching(value.directoryIdentityCandidates, company: company)
         }
         return try await store.setParticipantContext(context, meetingID: id)
     }

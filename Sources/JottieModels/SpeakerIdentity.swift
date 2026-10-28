@@ -72,7 +72,17 @@ public extension Meeting {
     func hasNamedSourceLabel(_ label: String) -> Bool {
         let words = NameAliases.normalise(label).split(separator: " ")
         let reserved = ["speaker", "voice", "them", "me", "remote", "system", "unknown", "unidentified", "participant"]
-        return words.count >= 2 && !reserved.contains(String(words[0])) && !label.contains(where: \.isNumber)
+        let explicitDocumentName = sourceMetadata?["documentParserRevision"] != nil
+        return (words.count >= 2 || (explicitDocumentName && !words.isEmpty))
+            && !reserved.contains(String(words.first ?? "")) && !label.contains(where: \.isNumber)
+    }
+    /// Directory lookup candidates are identities, not proof of invitation.
+    var directoryIdentityCandidates: [String] {
+        var seen = Set<String>()
+        let labels = Array(Set(segments.map(\.speaker))).sorted().filter(hasNamedSourceLabel)
+        return (participants + labels + speakerNames.values.sorted()).filter {
+            !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && seen.insert($0).inserted
+        }
     }
     func unknownSpeakerName(_ label: String) -> String {
         let labels = Array(Set(segments.map(\.speaker))).sorted()
@@ -159,9 +169,9 @@ public extension Meeting {
                 }
                 continue
             }
-            var sources = ["Voice detected"]
+            var sources = [sourceMetadata?["documentSHA256"] == nil ? "Voice detected" : "Document transcript"]
             if let attribution {
-                if person != nil || participants.contains(where: { NameAliases.mentions(name, in: $0) }) { sources.append("Meeting invite") }
+                if person.map({ participants.contains($0.invitee) }) == true || participants.contains(where: { NameAliases.mentions(name, in: $0) }) { sources.append("Meeting invite") }
                 if person != nil { sources.append("BambooHR") }
                 sources.append(attribution.method == "manual" ? "User assignment" : attribution.method == "transcript" ? "Transcript label" : "AI inference")
                 if mentioned(match.map { aliases[$0] } ?? [NameAliases.normalise(name)]) { sources.append("Name mentioned") }

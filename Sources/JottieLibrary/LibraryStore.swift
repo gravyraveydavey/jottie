@@ -428,6 +428,7 @@ public actor LibraryStore: MeetingRepository {
     public func reconcile() throws {
         if !readOnly {
             try locked {
+                try repairStoredDocumentTurns()
                 for meeting in try meetings() where (meeting.analysis?.analysis.tags.count ?? 0) > 10 { try commit(meeting) }
             }
         }
@@ -651,19 +652,21 @@ public actor LibraryStore: MeetingRepository {
                 let document = try TranscriptDocuments.text(url)
                 guard !document.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
                 let sourceID = Codec.hash("document:" + url.standardizedFileURL.path)
-                let segments = [Segment(id: "s1", speaker: "unknown", text: document.text)]
+                let parsed = DocumentSpeakerTurns.parse(document.text)
+                let segments = parsed?.segments ?? [Segment(id: "s1", speaker: "unknown", text: document.text)]
                 let changed = try locked {
                     let existing = try meetings().first { $0.sourceID == sourceID || $0.sourceMetadata?["documentSHA256"] == document.digest }
                     var value = existing ?? Meeting(sourceID: sourceID, title: url.deletingPathExtension().lastPathComponent,
-                        startedAt: (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? Date(), segments: segments)
-                    if let existing, existing.sourceMetadata?["documentSHA256"] == document.digest { return false }
-                    let fresh = Meeting(sourceID: sourceID, title: value.title, segments: segments)
-                    if value.transcriptRevision != fresh.transcriptRevision {
-                        value.segments = segments; value.transcriptRevision = fresh.transcriptRevision; value.analysis = nil
-                    }
+                        startedAt: parsed?.startedAt ?? (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? Date(), segments: segments)
+                    if let existing, existing.sourceMetadata?["documentSHA256"] == document.digest,
+                       existing.sourceMetadata?["documentParserRevision"] == DocumentSpeakerTurns.revision { return false }
+                    try replaceDocumentSegments(in: &value, with: segments)
+                    if let started = parsed?.startedAt { value.startedAt = started }
                     var metadata = value.sourceMetadata ?? [:]
                     metadata["documentSHA256"] = document.digest
                     metadata["importFormat"] = url.pathExtension.lowercased()
+                    metadata["documentParserRevision"] = DocumentSpeakerTurns.revision
+                    if let parsed { metadata["documentPreamble"] = parsed.preamble }
                     value.sourceMetadata = metadata
                     let history = meetingDirectory(value.id).appendingPathComponent("SourceTextHistory")
                     try Self.directory(history)
@@ -675,5 +678,41 @@ public actor LibraryStore: MeetingRepository {
             } catch { report.failures.append("\(url.lastPathComponent): \(error.localizedDescription)") }
         }
         return report
+    }
+
+    /// Upgrades the old single-passage projection from already retained text.
+    /// Never reaches Downloads, contacts a model or guesses how to redistribute
+    /// user corrections across newly split passages.
+    private func repairStoredDocumentTurns() throws {
+        for var value in try meetings() {
+            guard value.sourceMetadata?["documentParserRevision"] != DocumentSpeakerTurns.revision,
+                  let digest = value.sourceMetadata?["documentSHA256"], digest.count == 64, digest.allSatisfy(\.isHexDigit),
+                  value.segments.count == 1, value.segments[0].speaker == "unknown",
+                  value.speakerNames.isEmpty, (value.speakerRoles ?? [:]).isEmpty,
+                  !(value.speakerAttributions ?? [:]).values.contains(where: { $0.method == "manual" }) else { continue }
+            let source = meetingDirectory(value.id).appendingPathComponent("SourceTextHistory/\(digest).txt")
+            guard let size = try? source.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= 64_000_000,
+                  let bytes = try? Data(contentsOf: source), bytes.count <= 64_000_000,
+                  let text = String(data: bytes, encoding: .utf8), text == value.segments[0].text,
+                  let parsed = DocumentSpeakerTurns.parse(text) else { continue }
+            try replaceDocumentSegments(in: &value, with: parsed.segments)
+            value.sourceMetadata?["documentParserRevision"] = DocumentSpeakerTurns.revision
+            value.sourceMetadata?["documentPreamble"] = parsed.preamble
+            if let started = parsed.startedAt { value.startedAt = started }
+            try commit(value)
+        }
+    }
+    private func replaceDocumentSegments(in value: inout Meeting, with segments: [Segment]) throws {
+        let revision = Codec.hash(try Codec.encode(segments))
+        guard value.transcriptRevision != revision else { return }
+        let previous = Dictionary(uniqueKeysWithValues: value.segments.map { ($0.id, $0) })
+        let current = Dictionary(uniqueKeysWithValues: segments.map { ($0.id, $0) })
+        value.speakerAttributions = value.speakerAttributions?.filter { id, attribution in
+            attribution.method == "manual" && previous[id] == current[id]
+        }
+        let labels = Set(segments.map(\.speaker))
+        value.speakerNames = value.speakerNames.filter { labels.contains($0.key) }
+        value.speakerRoles = value.speakerRoles?.filter { labels.contains($0.key) }
+        value.segments = segments; value.transcriptRevision = revision; value.analysis = nil
     }
 }
