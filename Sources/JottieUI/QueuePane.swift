@@ -18,13 +18,16 @@ import JottieLibrary
                         Label(model.working ? "Processing" : "Process queue", systemImage: "play")
                     }.buttonStyle(JottieButtonStyle(kind: .primary)).disabled(model.working || model.jobs.isEmpty)
                 }
-                VStack(alignment: .leading, spacing: 12) {
+                if model.progress.total > 0 || !model.jobs.isEmpty {
+                  VStack(alignment: .leading, spacing: 12) {
+                    Text("Summaries & knowledge").font(JottieStyle.font(17, .semibold))
                     HStack {
                         Text(model.progress.label)
                         Spacer()
                         JottieBadge(text: "\(model.jobs.count) pending", outlined: true)
                     }.font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted)
                     ProgressView(value: Double(model.progress.completed), total: Double(max(1, model.progress.total))).tint(JottieStyle.accent)
+                  }
                 }
                 if let importing = model.capture.mediaImport {
                     HStack { ProgressView().controlSize(.small); Text(importing) }

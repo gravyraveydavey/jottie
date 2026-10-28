@@ -200,7 +200,7 @@ typealias ViewState<Value> = SwiftUI.State<Value>
                 }.buttonStyle(JottieButtonStyle()).disabled(model.working || model.settingsDirty)
                     .help("Update missing summaries and summaries using an earlier prompt")
                 Button { model.importTranscripts() } label: { HStack(spacing: 6) { JottieImportIcon(); Text("Import") } }
-                    .buttonStyle(JottieButtonStyle(kind: .outline)).help("Import transcript folders, Markdown, text or Word documents")
+                    .buttonStyle(JottieButtonStyle(kind: .outline)).help("Import audio, video, transcript folders, Markdown, text or Word documents")
                 Button { model.onRecord?() } label: { Label(model.capture.isRecording ? "Stop recording" : "New recording", systemImage: model.capture.isRecording ? "stop.circle" : "mic") }
                     .buttonStyle(JottieButtonStyle(kind: .primary)).disabled(model.onRecord == nil)
                     .help(model.capture.isRecording ? "Stop and transcribe this recording" : "Start a local meeting recording")

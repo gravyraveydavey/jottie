@@ -19,3 +19,9 @@ The supplied whisper-web reference uses Transformers.js in a worker. Its useful 
 ## Automated validation — 28 October 2026
 
 The microphone regression tests first failed against the previous implementation, then passed with the fix. The full serial Swift suite passed (777 inherited/capture tests and 61 Jottie tests). Coverage includes microphone and remote namespaces, retained owner identity for one mic voice, unresolved mic passages, voice-evidence propagation, multi-file UI routing, Queue states, and native movie audio extraction with byte-for-byte preservation of the source. Existing capture/recovery, failed-transcription retention and durable cleanup tests also passed. These checks do not establish diarization accuracy on real meetings.
+
+## Native app check — 28 October 2026
+
+Jottie 0.6.5 (450) replaced the existing app in place and launched through LaunchServices. Through the top Import picker, an invented MP4 containing two macOS-synthesised voices opened Queue and completed local Parakeet transcription plus Community-1 separation: two clusters, six assigned segments, zero unresolved. The durable transcript contains three segments per speaker. Jottie removed its normalized audio after commit and the original MP4 retained its SHA-256 hash. This exercises installed model inference and the native UI, not real-call accuracy or microphone permissions. The final UI follow-up clarifies the Import tooltip and shows analysis progress only when that work exists.
+
+The saved opt-in Codex workflow also completed on this invented recording and filed it into Jottie Testing. Native Speakers inspection showed two anonymous entries with three passages each and no attached invitation; no directory identity was invented. The sample remains available as **Synthetic speaker separation test** for review. Existing real meetings were not regenerated or re-transcribed.
