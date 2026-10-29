@@ -7,9 +7,19 @@ public actor PeopleDirectory {
     private let database: DatabaseQueue
     public init(root: URL) throws {
         try LibraryStore.directory(root)
-        database = try DatabaseQueue(path: root.appendingPathComponent("directory.sqlite").path)
-        try database.write { db in
-            try db.execute(sql: "CREATE TABLE IF NOT EXISTS directory_aliases(company TEXT, id TEXT, alias TEXT, PRIMARY KEY(company,id,alias)); CREATE TABLE IF NOT EXISTS directory(company TEXT, id TEXT, name TEXT, email TEXT, title TEXT, PRIMARY KEY(company,id)); CREATE TABLE IF NOT EXISTS directory_sync(company TEXT PRIMARY KEY, synced REAL NOT NULL)")
+        var configuration = Configuration()
+        // Settings and background refreshes use independent connections.
+        configuration.busyMode = .timeout(5)
+        database = try DatabaseQueue(path: root.appendingPathComponent("directory.sqlite").path, configuration: configuration)
+        let hasSchema = try database.read { db in
+            try db.tableExists("directory_aliases") && db.tableExists("directory") && db.tableExists("directory_sync")
+        }
+        // Even CREATE TABLE IF NOT EXISTS takes a write transaction whose
+        // COMMIT needs an exclusive lock. Opening an existing cache is a read.
+        if !hasSchema {
+            try database.write { db in
+                try db.execute(sql: "CREATE TABLE IF NOT EXISTS directory_aliases(company TEXT, id TEXT, alias TEXT, PRIMARY KEY(company,id,alias)); CREATE TABLE IF NOT EXISTS directory(company TEXT, id TEXT, name TEXT, email TEXT, title TEXT, PRIMARY KEY(company,id)); CREATE TABLE IF NOT EXISTS directory_sync(company TEXT PRIMARY KEY, synced REAL NOT NULL)")
+            }
         }
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: root.appendingPathComponent("directory.sqlite").path)
     }
