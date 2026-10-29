@@ -48,6 +48,14 @@ The full suite passed with 767 inherited Swift tests and 32 Jottie tests; the op
 
 Verified on 26 October 2026: the final packaged app discovered the ChatGPT-bundled Codex CLI 0.163.0-alpha.10.2 with a minimal `/usr/bin:/bin` PATH, confirmed ChatGPT sign-in and received a valid structured response to an invented connection-test prompt. The 767 inherited Swift tests and all 24 Jottie tests passed (the optional offscreen UI preview was skipped). Recording and transcription were idle before the previous development instance was closed and replaced. This check did not submit a real transcript.
 
+## Menu bar placement — 29 October 2026
+
+The menu bar uses Jottie's medium-weight waveform, with template rendering while idle and red/orange recording states. The inherited status window and About window use the same mark.
+
+A missing icon on the development Mac was caused by placement outside the MacBook's usable status-icon region, despite both the app and macOS visibility switches being enabled. Temporary diagnostics found the item at x=604; the screen's auxiliary top-right region began at x=825. Giving the item a stable `JottieRecordingStatus` autosave name and seeding its initially unset preferred position from the right edge moved it to x=1260. The seed is applied only when no saved position exists, preserving subsequent user rearrangements. Tests skip real status-item preferences and check seeding/preservation in an isolated defaults suite.
+
+All eight focused menu/setup tests passed, along with the native build, packaged launch, signature and macOS 14.2 compatibility checks. Temporary geometry diagnostics were removed after the live placement check. The user separately confirmed that the soundwave is visible in the menu bar and its menu opens correctly.
+
 ## Manual verification
 
 Use invented meeting data for development. Confirm these flows before treating the pilot as ready for daily use:

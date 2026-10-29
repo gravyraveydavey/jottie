@@ -198,8 +198,7 @@ struct InterfaceLanguageTests {
             != Self.inLanguage(.russian) { RecordingsWindow.nothingOwedLine })
     }
 
-    /// And the About window, which is four sentences and three links and is
-    /// read in one go — nothing in it changes after it is built.
+    /// The About window is read in one go; its text is fixed when it is built.
     @Test("Nothing in the About window is left in English when it is Russian")
     @MainActor
     func theAboutWindowIsAllInOneLanguage() {
@@ -211,17 +210,13 @@ struct InterfaceLanguageTests {
                 "still English in a Russian window: \(Self.untranslated(english, russian))")
     }
 
-    /// The one link in amanu whose address depends on the language: the
-    /// studio has a site in each, and an English window sending a person to
-    /// the Russian one would be sending them to a page they cannot read. The
-    /// other two are one page each and stay where they are.
-    @Test("«Order custom development» goes to the site in the window's language")
+    @Test("The About creator and source destinations are consistent in both languages")
     @MainActor
-    func theStudioLinkFollowsTheLanguage() {
+    func aboutLinksHaveConsistentDestinations() {
         #expect(Self.inLanguage(.english) { AboutWindow().offeredLinks.map(\.url) }
-            == ["https://samat.me", "https://github.com/gravyraveydavey/jottie", "https://fans.dev"])
+            == ["https://www.devcanhelp.com", "https://github.com/gravyraveydavey/jottie"])
         #expect(Self.inLanguage(.russian) { AboutWindow().offeredLinks.map(\.url) }
-            == ["https://samat.me", "https://github.com/gravyraveydavey/jottie", "https://fansdev.ru"])
+            == ["https://www.devcanhelp.com", "https://github.com/gravyraveydavey/jottie"])
     }
 
     /// And the same question of the Advanced tab, which is written from
@@ -589,7 +584,7 @@ struct InterfaceLanguageTests {
         // Names of things, and the shape of a key nobody translates.
         let names = [
             "AssemblyAI", "OpenAI", "OpenAI-compatible", "ElevenLabs", "Anthropic", "Claude Code", "Codex", "Ollama",
-            "sk-ant-…", "sk-…", "jottie",
+            "sk-ant-…", "sk-…", "jottie", "Dave Welch ↗",
             // The models, named the way their release notes name them.
             "parakeet v3", "parakeet v2", "NVIDIA nemotron",
             "Parakeet", "Parakeet v3", "Whisper large-v3-turbo", "GigaAM v3",

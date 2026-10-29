@@ -1,19 +1,6 @@
 import AppKit
 
-/// The small window behind **About jottie**: whose program this is, where its
-/// source is, and how to ask for one like it.
-///
-/// Every Mac application has this window and it is always in the same place,
-/// which is the whole reason for it — somebody wondering who wrote a thing
-/// that has been recording their meetings for a month looks under About
-/// before anywhere else. jottie had nowhere to answer: it runs as
-/// `.accessory`, so its application menu is only on screen while one of its
-/// windows is in front, and neither the status window nor Settings is a place
-/// for a name.
-///
-/// It says four things and does nothing. A window with an action in it is a
-/// window that has to know what the recorder is doing; this one can be opened
-/// at any moment of a recording and cost nothing.
+/// Jottie's About window: product description, creator and source repository.
 @MainActor
 final class AboutWindow: NSObject {
     private let panel: NSWindow
@@ -34,10 +21,10 @@ final class AboutWindow: NSObject {
         panel.isReleasedWhenClosed = false
 
         let icon = NSImageView()
-        // The same feather as the Dock icon, drawn as a template so it is
+        // The same soundwave as the Dock icon, drawn as a template so it is
         // black on a light Mac and white on a dark one without this window
         // having to know which it is.
-        icon.image = FeatherIcon.image(size: 72, color: nil)
+        icon.image = JottieIcon.image(size: 72, color: nil)
 
         let name = NSTextField(labelWithString: "jottie")
         name.font = .systemFont(ofSize: 22, weight: .semibold)
@@ -50,8 +37,8 @@ final class AboutWindow: NSObject {
         version.isHidden = Self.versionLine == nil
 
         let tagline = NSTextField(labelWithString: localised(
-            "Records your meetings and keeps them on this Mac.",
-            "Записывает встречи и держит их на этом Маке."))
+            "Your transcriptions, cleaned, tagged and organised",
+            "Ваши расшифровки — вычитаны, размечены и упорядочены"))
         tagline.font = .systemFont(ofSize: 12)
         tagline.textColor = .secondaryLabelColor
         tagline.alignment = .center
@@ -60,13 +47,9 @@ final class AboutWindow: NSObject {
         tagline.preferredMaxLayoutWidth = 260
 
         linkButtons = [
-            // A name is usually left exactly as it is; a name is also how a
-            // person is called, and in Russian this one is called this.
-            link(localised("Samat Galimov", "Самат Галимов"), Self.authorPage),
+            link("Dave Welch", Self.authorPage),
             link(localised("Source code on GitHub", "Исходный код на GitHub"),
                  Self.sourceRepository),
-            link(localised("Order custom development", "Заказать разработку"),
-                 Self.developmentStudio),
         ]
         let links = NSStackView(views: linkButtons)
         links.orientation = .vertical
@@ -113,26 +96,18 @@ final class AboutWindow: NSObject {
     var view: NSView? { panel.contentView }
     var title: String { panel.title }
 
-    /// The three links, as they read and where they go. The window is
+    /// The links, as they read and where they go. The window is
     /// nothing but these, so this is how anything outside checks them.
     var offeredLinks: [(title: String, url: String)] {
         linkButtons.map { ($0.title, $0.identifier?.rawValue ?? "") }
     }
 
-    /// Wide enough for the longest of the three links with room around it,
+    /// Wide enough for the longest link with room around it,
     /// and no wider: nothing in here is a paragraph.
     private static let width: CGFloat = 340
 
-    static let authorPage = "https://samat.me"
+    static let authorPage = "https://www.devcanhelp.com"
     static let sourceRepository = "https://github.com/gravyraveydavey/jottie"
-
-    /// The studio's site exists in each of jottie's two languages, and the one
-    /// to open is the one the person reading this window can read. Which is
-    /// why an address goes through `localised` here, where addresses usually
-    /// stay as they are: these two are one page written twice, not a name.
-    static var developmentStudio: String {
-        localised("https://fans.dev", "https://fansdev.ru")
-    }
 
     /// The version, as the bundle knows it. Nil for a bare build, which has
     /// no `Info.plist` to have been stamped by `make app`.

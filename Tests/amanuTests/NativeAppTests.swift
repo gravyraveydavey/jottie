@@ -230,8 +230,24 @@ struct SetupOfferTests {
         #expect(!menuBar.isVisible)
     }
 
+    @Test("A new status item starts at the right edge without resetting a chosen position")
+    func statusItemKeepsChosenPosition() throws {
+        let suite = "jottie-menu-position-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let key = "NSStatusItem Preferred Position \(MenuBarController.autosaveName)"
+
+        MenuBarController.prepareStatusItemPosition(in: defaults)
+        #expect(defaults.object(forKey: key) != nil)
+        #expect(defaults.integer(forKey: key) == 0)
+
+        defaults.set(275.5, forKey: key)
+        MenuBarController.prepareStatusItemPosition(in: defaults)
+        #expect(defaults.double(forKey: key) == 275.5)
+    }
+
     /// A meeting that started while the icon was off is the state the icon
-    /// has to come back showing. Drawing an idle feather over a running
+    /// has to come back showing. Drawing an idle soundwave over a running
     /// recording is the one thing the menu bar must never do.
     @Test("An icon put back mid-recording shows the recording")
     func statusItemReturnsShowingTheRecording() {
@@ -261,17 +277,16 @@ struct SetupOfferTests {
         #expect(appMenu.items.first?.title == "About Jottie")
     }
 
-    /// The window itself: three links, and each going where it says.
-    @Test("The About window names its author and links to the source and the studio")
+    /// The window itself: creator and source links, each going where it says.
+    @Test("The About window credits Dave Welch and links to the Jottie source")
     @MainActor
-    func aboutWindowOffersThreeLinks() {
+    func aboutWindowOffersCreatorAndSourceLinks() {
         let about = AboutWindow()
         #expect(about.offeredLinks.map(\.title)
-            == ["Samat Galimov ↗", "Source code on GitHub ↗", "Order custom development ↗"])
+            == ["Dave Welch ↗", "Source code on GitHub ↗"])
         #expect(about.offeredLinks.map(\.url) == [
-            "https://samat.me",
+            "https://www.devcanhelp.com",
             "https://github.com/gravyraveydavey/jottie",
-            "https://fans.dev",
         ])
     }
 

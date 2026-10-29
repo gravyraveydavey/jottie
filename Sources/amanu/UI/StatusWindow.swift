@@ -310,9 +310,9 @@ final class StatusWindow {
 
     func update(state: MenuBarController.State, elapsed: String?) {
         let recording = state != .idle
-        icon.image = FeatherIcon.image(
+        icon.image = JottieIcon.image(
             size: 18,
-            color: FeatherIcon.color(recording: recording, paused: state == .paused)
+            color: JottieIcon.color(recording: recording, paused: state == .paused)
         )
         switch state {
         case .idle:

@@ -795,9 +795,9 @@ final class SetupForm: NSObject, NSTextFieldDelegate {
             title: SetupLayout.title(localised("In the menu bar", "В строке меню")),
             detail: SetupLayout.detail(
                 localised(
-                    "The feather, with the clock beside it while a meeting records — and the "
+                    "The soundwave, with the clock beside it while a meeting records — and the "
                         + "menu with everything in it.",
-                    "Перо, во время встречи рядом с ним часы, и меню со всем остальным."),
+                    "Звуковая волна, во время встречи рядом с ним часы, и меню со всем остальным."),
                 lines: 2, width: 520))
     }
 
