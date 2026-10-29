@@ -9,7 +9,7 @@
 #
 #   make            build, verify and replace Jottie.app
 #   make run-app    and launch it through LaunchServices
-#   make icon       redraw Resources/Amanu.icns from the feather
+#   make icon       redraw Jottie's purple waveform icons
 #   make identities list available signing identities
 #   make verify     show the built app's signature
 #   make release    build, notarize and publish a release
@@ -39,8 +39,8 @@ BUILD     ?= $(shell git rev-list --count HEAD 2>/dev/null || echo 1)
 # Local UI verification may use an already-built single-architecture executable
 # and the classic icon when Xcode's asset compiler is unavailable.
 PILOT_BUILD ?= 0
-ICON       = Resources/Amanu.icns
-ADAPTIVE_ICON = Resources/Amanu.icon
+ICON       = Resources/Jottie.icns
+ADAPTIVE_ICON = Resources/Jottie.icon
 BUILT_ICON = .build/app-icon
 DIST       = dist
 DMG        = $(DIST)/jottie-v$(VERSION)-macos-universal.dmg
@@ -105,19 +105,22 @@ verify-localvqe: localvqe
 build: localvqe
 	swift build -c release --arch arm64 --arch x86_64
 
-# Drawn from the same feather the menu bar uses, so the Dock, the window and
-# the status item are one program rather than three.
+# Match the purple waveform badge in the Jottie workspace.
 icon:
-	@swift scripts/make-icon.swift $(ICON)
+	@swift scripts/make-jottie-icon.swift $(ICON)
+	@swift scripts/make-jottie-icon.swift --adaptive-layer $(ADAPTIVE_ICON)/Assets/Jottie-waveform.png
 
-$(ICON):
-	@swift scripts/make-icon.swift $(ICON)
+$(ICON): scripts/make-jottie-icon.swift
+	@swift scripts/make-jottie-icon.swift $(ICON)
 
-app: build $(ICON)
+$(ADAPTIVE_ICON)/Assets/Jottie-waveform.png: scripts/make-jottie-icon.swift
+	@swift scripts/make-jottie-icon.swift --adaptive-layer $@
+
+app: build $(ICON) $(ADAPTIVE_ICON)/Assets/Jottie-waveform.png
 	@rm -rf $(STAGED_APP)
 	@mkdir -p $(STAGED_APP)/Contents/MacOS $(STAGED_APP)/Contents/Resources/Models $(STAGED_APP)/Contents/Frameworks
 	@if [ "$(PILOT_BUILD)" = "1" ]; then \
-		mkdir -p $(BUILT_ICON); cp $(ICON) $(BUILT_ICON)/Amanu.icns; \
+		mkdir -p $(BUILT_ICON); rm -f $(BUILT_ICON)/Assets.car; cp $(ICON) $(BUILT_ICON)/Jottie.icns; \
 	else scripts/build-app-icon.sh $(ADAPTIVE_ICON) $(ICON) $(BUILT_ICON) $(MINIMUM_MACOS); fi
 	@cp $(BUILT) $(STAGED_APP)/Contents/MacOS/$(APP_NAME)
 	@cp $(LOCALVQE_LIB) $(STAGED_APP)/Contents/Frameworks/liblocalvqe.dylib
@@ -127,7 +130,7 @@ app: build $(ICON)
 	@sed -e 's/__SHORT_VERSION__/$(VERSION)/' -e 's/__BUILD_VERSION__/$(BUILD)/' \
 		Packaging/Amanu-Info.plist > $(STAGED_APP)/Contents/Info.plist
 	@printf 'APPL????' > $(STAGED_APP)/Contents/PkgInfo
-	@cp $(BUILT_ICON)/Amanu.icns $(STAGED_APP)/Contents/Resources/Jottie.icns
+	@cp $(BUILT_ICON)/Jottie.icns $(STAGED_APP)/Contents/Resources/Jottie.icns
 	@if [ -f $(BUILT_ICON)/Assets.car ]; then cp $(BUILT_ICON)/Assets.car $(STAGED_APP)/Contents/Resources/Assets.car; fi
 	@for resource in $$(dirname "$(BUILT)")/*.bundle; do \
 		case "$$resource" in *_JottieTests.bundle) continue ;; esac; \

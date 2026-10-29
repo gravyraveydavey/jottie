@@ -11,6 +11,7 @@ ADAPTIVE_ICON=$1
 FALLBACK_ICON=$2
 OUTPUT_DIR=$3
 MINIMUM_MACOS=$4
+ICON_NAME=$(basename "$ADAPTIVE_ICON" .icon)
 
 test -f "$ADAPTIVE_ICON/icon.json" || {
     echo "adaptive icon is missing: $ADAPTIVE_ICON/icon.json" >&2
@@ -29,7 +30,7 @@ xcrun actool \
     --compile "$WORK/compiled" \
     --platform macosx \
     --minimum-deployment-target "$MINIMUM_MACOS" \
-    --app-icon Amanu \
+    --app-icon "$ICON_NAME" \
     --output-partial-info-plist "$WORK/partial.plist" \
     "$ADAPTIVE_ICON" >/dev/null
 
@@ -39,7 +40,6 @@ test -s "$WORK/compiled/Assets.car" || {
 }
 
 # Assets.car gives Tahoe and later the layered appearance variants. Keep the
-# hand-tuned classic icon beside it instead of actool's flattened fallback, so
-# Sonoma and Sequoia retain the exact icon they already know.
+# matching classic icon for Sonoma and Sequoia beside it.
 cp "$WORK/compiled/Assets.car" "$OUTPUT_DIR/Assets.car"
-cp "$FALLBACK_ICON" "$OUTPUT_DIR/Amanu.icns"
+cp "$FALLBACK_ICON" "$OUTPUT_DIR/$ICON_NAME.icns"

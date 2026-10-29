@@ -7,8 +7,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-ICON = ROOT / "Resources" / "Amanu.icon"
-CLASSIC_ICON = ROOT / "Resources" / "Amanu.icns"
+ICON = ROOT / "Resources" / "Jottie.icon"
+CLASSIC_ICON = ROOT / "Resources" / "Jottie.icns"
 BUILD_SCRIPT = ROOT / "scripts" / "build-app-icon.sh"
 
 
@@ -30,7 +30,7 @@ class AppIconTests(unittest.TestCase):
     def test_icon_composer_asset_builds_all_macos_appearances(self):
         self.assertTrue(
             (ICON / "icon.json").is_file(),
-            "Resources/Amanu.icon/icon.json is missing",
+            "Resources/Jottie.icon/icon.json is missing",
         )
 
         with tempfile.TemporaryDirectory() as directory:
@@ -47,7 +47,7 @@ class AppIconTests(unittest.TestCase):
                     "--minimum-deployment-target",
                     "14.2",
                     "--app-icon",
-                    "Amanu",
+                    "Jottie",
                     "--output-partial-info-plist",
                     str(partial_plist),
                     str(ICON),
@@ -58,12 +58,12 @@ class AppIconTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertTrue((output / "Assets.car").is_file())
-            self.assertTrue((output / "Amanu.icns").is_file())
+            self.assertTrue((output / "Jottie.icns").is_file())
 
             with partial_plist.open("rb") as file:
                 generated_info = plistlib.load(file)
-            self.assertEqual(generated_info["CFBundleIconName"], "Amanu")
-            self.assertEqual(generated_info["CFBundleIconFile"], "Amanu")
+            self.assertEqual(generated_info["CFBundleIconName"], "Jottie")
+            self.assertEqual(generated_info["CFBundleIconFile"], "Jottie")
 
             catalog = subprocess.run(
                 ["assetutil", "--info", str(output / "Assets.car")],
@@ -76,7 +76,7 @@ class AppIconTests(unittest.TestCase):
                 item.get("Appearance"): item
                 for item in renditions
                 if item.get("AssetType") == "IconImageStack"
-                and item.get("Name") == "Amanu"
+                and item.get("Name") == "Jottie"
             }
             self.assertEqual(
                 set(stacks),
@@ -90,14 +90,14 @@ class AppIconTests(unittest.TestCase):
                 self.assertGreaterEqual(
                     stack["LayerCount"],
                     2,
-                    f"{appearance} lost the feather foreground layer",
+                    f"{appearance} lost the waveform foreground layer",
                 )
 
             groups = {
                 item.get("Appearance"): item
                 for item in renditions
                 if item.get("AssetType") == "IconGroup"
-                and item.get("Name") == "Amanu/Group"
+                and item.get("Name") == "Jottie/Group"
             }
             self.assertEqual(set(groups), set(stacks))
             for appearance, group in groups.items():
@@ -105,12 +105,12 @@ class AppIconTests(unittest.TestCase):
                 self.assertEqual(
                     layer["AssetType"],
                     "Image",
-                    f"{appearance} must preserve the hollow raster outline",
+                    f"{appearance} must preserve the waveform strokes",
                 )
                 self.assertFalse(layer["Opaque"])
                 width, height = map(int, layer["LayerSize"].split(","))
-                self.assertGreaterEqual(width, 1200)
-                self.assertGreaterEqual(height, 1200)
+                self.assertGreaterEqual(width, 1024)
+                self.assertGreaterEqual(height, 1024)
 
     def test_app_icon_build_keeps_the_classic_fallback(self):
         self.assertTrue(BUILD_SCRIPT.is_file(), "scripts/build-app-icon.sh is missing")
@@ -132,7 +132,7 @@ class AppIconTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertTrue((output / "Assets.car").is_file())
             self.assertEqual(
-                (output / "Amanu.icns").read_bytes(),
+                (output / "Jottie.icns").read_bytes(),
                 CLASSIC_ICON.read_bytes(),
             )
 

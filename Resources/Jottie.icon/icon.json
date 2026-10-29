@@ -1,0 +1,22 @@
+{
+  "fill": { "solid": "extended-srgb:0.43922,0.28627,0.78824,1.00000" },
+  "groups": [
+    {
+      "layers": [
+        {
+          "fill-specializations": [
+            { "value": { "solid": "extended-srgb:1.00000,1.00000,1.00000,1.00000" } }
+          ],
+          "glass": false,
+          "hidden": false,
+          "image-name": "Jottie-waveform.png",
+          "name": "Jottie waveform",
+          "position": { "scale": 1, "translation-in-points": [0, 0] }
+        }
+      ],
+      "shadow": { "kind": "neutral", "opacity": 0.3 },
+      "translucency": { "enabled": false, "value": 0 }
+    }
+  ],
+  "supported-platforms": { "squares": ["macOS"] }
+}
