@@ -230,6 +230,20 @@ public actor GraphPublisher: ContextPublisher {
         guard let version = value.eTag else { throw JottieError.invalid("Missing remote version.") }
         try Codec.encode(Receipt(itemID: value.id, eTag: version, hash: Codec.hash(data))).write(to: receipt, options: .atomic)
     }
+    /// Review proposals, removed source text and device notes remain local.
+    /// Publication carries selected text and a compact provenance record.
+    public static func publicationMetadata(_ meeting: Meeting) throws -> Data {
+        guard var object = try JSONSerialization.jsonObject(with: Codec.encode(meeting)) as? [String: Any] else {
+            throw JottieError.invalid("Invalid meeting publication metadata.")
+        }
+        for key in ["cleanupDraft", "cleanupOriginalSegments", "activeCleanup", "recordingContext", "cleanupPreferences"] { object.removeValue(forKey: key) }
+        if let cleanup = meeting.activeCleanup {
+            object["cleanupProvenance"] = ["revision": cleanup.id, "originalTranscriptRevision": meeting.originalTranscriptRevision,
+                "promptRevision": cleanup.promptRevision, "model": cleanup.model, "effort": cleanup.effort,
+                "createdAt": ISO8601DateFormatter().string(from: cleanup.createdAt)]
+        }
+        return try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
+    }
     public func publish(meeting: Meeting, to destination: PublishDestination) async throws {
         guard let revision = meeting.analysis, revision.analysis.sensitivity == "normal" else {
             throw JottieError.invalid("Publication held: this meeting needs review.")
@@ -238,9 +252,9 @@ public actor GraphPublisher: ContextPublisher {
         let meetings = try await folder("Meetings", parent: destination.itemID, destination: destination)
         let parent = try await folder(meeting.id.uuidString, parent: meetings, destination: destination)
         // Membership and speaker corrections also affect publication, independently of AI revision.
-        let fingerprint = Codec.hash(try Codec.encode(meeting))
+        let metadata = try Self.publicationMetadata(meeting)
+        let fingerprint = Codec.hash(metadata)
         let version = try await folder(fingerprint, parent: parent, destination: destination)
-        let metadata = try Codec.encode(meeting)
         for (name, data) in [
             ("transcript.md", Data(meeting.transcript.utf8)),
             ("transcript.txt", Data(meeting.transcript.utf8)),

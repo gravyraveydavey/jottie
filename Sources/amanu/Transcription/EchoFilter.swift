@@ -20,7 +20,8 @@ import Foundation
 enum EchoFilter {
     /// After acoustic cancellation, only exact sequences of at least five
     /// words are removable. A mixed echo/local segment survives in full unless
-    /// every word is accounted for. ASR may split that sequence into words.
+    /// every word is accounted for. Compare continuous tracks as well as voices:
+    /// diarization can split the same phrase differently on the two tracks.
     static func dropResidualEchoes(_ segments: [Transcript.Segment]) -> [Transcript.Segment] {
         struct Token {
             let text: String
@@ -44,17 +45,33 @@ enum EchoFilter {
             }
         }
         var bySpeaker: [String: [Token]] = [:]
+        var bySide: [String: [Token]] = [:]
         var counts: [Int: Int] = [:]
-        for (index, segment) in segments.enumerated() {
+        let ordered = segments.enumerated().sorted {
+            $0.element.start_ms == $1.element.start_ms
+                ? $0.offset < $1.offset : $0.element.start_ms < $1.element.start_ms
+        }
+        for (index, segment) in ordered {
             let tokens = words(segment.text).map {
                 Token(text: $0, segment: index, start: segment.start_ms, end: segment.end_ms)
             }
             counts[index] = tokens.count
             bySpeaker[segment.speaker, default: []] += tokens
+            if isSide(segment.speaker, "me") { bySide["me", default: []] += tokens }
+            if isSide(segment.speaker, "them") { bySide["them", default: []] += tokens }
         }
+        func streams(on side: String) -> [[Token]] {
+            // Keep the voice-specific view too: genuine crosstalk must not
+            // interrupt an otherwise continuous echo from a different voice.
+            bySpeaker.filter { isSide($0.key, side) }.map(\.value) + [bySide[side] ?? []]
+        }
+        // Acoustic playback and ASR boundaries can lag the system transcript.
+        // Bound both ends of an exact phrase rather than requiring near-equal
+        // overlap, which rejects even an 800 ms copy of a short phrase.
+        let maximumLagMs = 1_200
         var remote: [String: [Window]] = [:]
         var longest = 0
-        for (speaker, tokens) in bySpeaker where isSide(speaker, "them") {
+        for tokens in streams(on: "them") {
             for window in windows(tokens) {
                 remote[window.key, default: []].append(window)
                 longest = max(longest, window.end - window.start)
@@ -62,7 +79,7 @@ enum EchoFilter {
         }
         for key in remote.keys { remote[key]!.sort { $0.start < $1.start } }
         var removable: Set<Int> = []
-        for (speaker, tokens) in bySpeaker where isSide(speaker, "me") {
+        for tokens in streams(on: "me") {
             var matched: Set<Int> = []
             for window in windows(tokens) {
                 guard let candidates = remote[window.key] else { continue }
@@ -70,7 +87,7 @@ enum EchoFilter {
                 var lo = 0, hi = candidates.count
                 while lo < hi {
                     let mid = (lo + hi) / 2
-                    if candidates[mid].start < window.start - longest - 400 { lo = mid + 1 }
+                    if candidates[mid].start < window.start - longest - maximumLagMs { lo = mid + 1 }
                     else { hi = mid }
                 }
                 var index = lo
@@ -78,7 +95,11 @@ enum EchoFilter {
                     let other = candidates[index]
                     let overlap = min(window.end, other.end) - max(window.start, other.start)
                     let union = max(window.end, other.end) - min(window.start, other.start)
-                    if union > 0 && Double(overlap) / Double(union) >= 0.8 {
+                    let startLag = window.start - other.start
+                    let endLag = window.end - other.end
+                    let delayedCopy = (-400...maximumLagMs).contains(startLag)
+                        && (-400...maximumLagMs).contains(endLag)
+                    if union > 0 && (Double(overlap) / Double(union) >= 0.8 || delayedCopy) {
                         matched.formUnion(window.positions)
                         break
                     }

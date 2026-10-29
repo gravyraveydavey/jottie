@@ -1,4 +1,5 @@
 import Foundation
+import JottieModels
 
 /// A session that is being recorded, as far as the filesystem can tell: the
 /// folder, the process that claimed it, and when it started. `ownerIsAlive`
@@ -249,6 +250,9 @@ final class RecordingSession {
         if pausedFor > 0 { meta["paused_seconds"] = Int(pausedFor) }
         if !trackEverStalled.isEmpty { meta["stalled_tracks"] = trackEverStalled.sorted() }
         meta["mic_capture"] = mic.capture.meta
+        if let data = try? Codec.encode(mic.recordingContext), let context = try? JSONSerialization.jsonObject(with: data) {
+            meta["recording_context"] = context
+        }
         // Every route change the mic track survived: headphones connecting,
         // AirPods leaving an ear, a call app taking the device. Each one is a
         // seam in the track, and a transcript that goes strange after one is
@@ -497,6 +501,7 @@ final class RecordingSession {
             if let calendar = manifest["calendar"] as? [String: Any] {
                 meta["calendar"] = calendar
             }
+            if let recordingContext = manifest["recording_context"] { meta["recording_context"] = recordingContext }
             // A stop that could not write meta.json kept what it would have
             // written here, and that is a better account than one rebuilt
             // from file dates: it knows why the recording ended and what the
@@ -589,6 +594,9 @@ final class RecordingSession {
             manifest["pid"] = ProcessInfo.processInfo.processIdentifier
         }
         if let title { manifest["title"] = title }
+        if let data = try? Codec.encode(mic.recordingContext), let context = try? JSONSerialization.jsonObject(with: data) {
+            manifest["recording_context"] = context
+        }
         manifest.merge(context.metaFields) { current, _ in current }
         if mic.firstBufferAt != nil || system.firstBufferAt != nil {
             manifest["start_offset_ms"] = Self.startOffsets(

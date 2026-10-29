@@ -79,18 +79,18 @@ public extension Meeting {
     /// Directory lookup candidates are identities, not proof of invitation.
     var directoryIdentityCandidates: [String] {
         var seen = Set<String>()
-        let labels = Array(Set(segments.map(\.speaker))).sorted().filter(hasNamedSourceLabel)
+        let labels = Array(Set((cleanupOriginalSegments ?? []).map(\.speaker) + segments.map(\.speaker))).sorted().filter(hasNamedSourceLabel)
         return (participants + labels + speakerNames.values.sorted()).filter {
             !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && seen.insert($0).inserted
         }
     }
     func unknownSpeakerName(_ label: String) -> String {
-        let labels = Array(Set(segments.map(\.speaker))).sorted()
+        let labels = Array(Set((cleanupOriginalSegments ?? []).map(\.speaker) + segments.map(\.speaker))).sorted()
         return "Speaker \((labels.firstIndex(of: label) ?? 0) + 1)" + (label == "me" ? " (you)" : "")
     }
     func speakerName(for segment: Segment) -> String { attribution(for: segment)?.name ?? unknownSpeakerName(segment.speaker) }
     var displaySpeakerNames: [String: String] {
-        let labels = Array(Set(segments.map(\.speaker))).sorted()
+        let labels = Array(Set((cleanupOriginalSegments ?? []).map(\.speaker) + segments.map(\.speaker))).sorted()
         let unknown = Dictionary(uniqueKeysWithValues: labels.enumerated().map { ($0.element, "Speaker \($0.offset + 1)" + ($0.element == "me" ? " (you)" : "")) })
         return Dictionary(uniqueKeysWithValues: segments.map { ($0.id, attribution(for: $0)?.name ?? unknown[$0.speaker] ?? "Unknown speaker") })
     }
@@ -117,7 +117,7 @@ public extension Meeting {
         }
     }
     var reconciledSpeakers: [ReconciledSpeaker] {
-        let labels = Array(Set(segments.map(\.speaker))).sorted()
+        let labels = Array(Set((cleanupOriginalSegments ?? []).map(\.speaker) + segments.map(\.speaker))).sorted()
         let unknown = Dictionary(uniqueKeysWithValues: labels.enumerated().map {
             ($0.element, "Speaker \($0.offset + 1)" + ($0.element == "me" ? " (you)" : ""))
         })

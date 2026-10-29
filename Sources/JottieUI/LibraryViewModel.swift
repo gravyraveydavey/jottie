@@ -98,6 +98,61 @@ public struct CaptureQueueItem: Identifiable, Equatable, Sendable {
     @Published public var checkingCodex = false
     @Published public var testingCodex = false
     @Published public var codexTestMessage: String?
+    @Published public var cleanupProcessingID: UUID?
+    @Published public var cleanupReviewMeeting: Meeting?
+    @Published public var cleanupProgress = "Preparing transcript…"
+    private var cleanupTask: Task<Void, Never>?
+    public func startTranscriptCleanup(_ meeting: Meeting, preferences: TranscriptCleanupPreferences? = nil) {
+        guard cleanupTask == nil else { return }
+        cleanupProcessingID = meeting.id
+        cleanupReviewMeeting = nil; cleanupProgress = "Preparing transcript…"
+        cleanupTask = Task { [weak self] in
+            guard let self else { return }
+            defer { self.cleanupProcessingID = nil; self.cleanupTask = nil }
+            do {
+                if let preferences {
+                    try await self.store.setCleanupPreferences(preferences, meetingID: meeting.id, expectedRevision: meeting.transcriptRevision)
+                }
+                try await self.coordinator.prepareTranscriptCleanup(meeting.id, progress: { [weak self] done, total in
+                    await MainActor.run { self?.cleanupProgress = done == total ? "Preparing review…" : "Cleaning section \(done + 1) of \(total)…" }
+                    await self?.refreshWorkStatus()
+                })
+                try Task.checkCancellation()
+                await self.reload()
+                self.cleanupReviewMeeting = try await self.store.meeting(meeting.id)
+            } catch { self.message = Task.isCancelled ? "Cleanup cancelled. Your transcript is unchanged." : error.localizedDescription }
+            await self.refreshWorkStatus()
+        }
+    }
+    public var cleanupPromptRevision: String { TranscriptCleanupService.promptRevision }
+    public func cleanupJob(for meeting: Meeting) -> WorkStatus? {
+        jobs.first { $0.id.hasPrefix("cleanup:\(meeting.id):") && $0.state == "running" }
+    }
+    public func isCleaning(_ meeting: Meeting) -> Bool { cleanupProcessingID == meeting.id || cleanupJob(for: meeting) != nil }
+    public func cleanupStatus(for meeting: Meeting) -> String {
+        cleanupJob(for: meeting)?.sectionProgress ?? (cleanupProcessingID == meeting.id ? cleanupProgress : "Preparing cleanup preview…")
+    }
+    private func refreshWorkStatus() async {
+        do {
+            jobs = try await coordinator.ledger.statuses()
+            progress = try await coordinator.processingProgress()
+        } catch { message = error.localizedDescription }
+    }
+    public func cancelTranscriptCleanup() { cleanupTask?.cancel() }
+    public func applyTranscriptCleanup(_ meeting: Meeting, changes: Set<String>, speakers: Set<String>) async throws {
+        guard let draft = meeting.cleanupDraft else { throw JottieError.conflict("Cleanup preview is no longer available.") }
+        try await store.applyCleanup(meetingID: meeting.id, draftID: draft.id, changeIDs: changes, speakerIDs: speakers)
+        cleanupReviewMeeting = nil
+        await reload()
+    }
+    public func restoreOriginalTranscript(_ meeting: Meeting) async {
+        do { try await store.restoreOriginalTranscript(meetingID: meeting.id, expectedRevision: meeting.transcriptRevision); await reload() }
+        catch { message = error.localizedDescription }
+    }
+    public func updateRecordingContext(_ meeting: Meeting, playback: String?, note: String) async throws {
+        try await store.setRecordingContext(playback: playback, note: note, meetingID: meeting.id)
+        await reload()
+    }
     private let persistPresentation: Bool
     private var loadedSettings = false
     private var requestedPages = 1
@@ -167,7 +222,7 @@ public struct CaptureQueueItem: Identifiable, Equatable, Sendable {
         guard savedSettings.analysisEnabled else { message = "Enable Codex analysis in Settings first."; return }
         working = true; defer { working = false }
         do {
-            for meeting in outdatedMeetings where meeting.analysis != nil { try await coordinator.regenerate(meeting.id) }
+            for meeting in outdatedMeetings where meeting.analysis != nil || meeting.sourceMetadata?["cleanupNeedsSummary"] == "true" { try await coordinator.regenerate(meeting.id) }
             await coordinator.run(updateNow: true); await reload()
         } catch { message = error.localizedDescription }
     }
@@ -349,6 +404,13 @@ public struct CaptureQueueItem: Identifiable, Equatable, Sendable {
         catch { message = error.localizedDescription }
     }
     public func retry(_ job: WorkStatus) async {
+        if job.isTranscriptCleanup {
+            if let id = job.id.split(separator: ":").dropFirst().first.flatMap({ UUID(uuidString: String($0)) }) {
+                navigate("all"); openMeeting(id)
+            }
+            message = "Open Transcript → Cleanup suggestions to review options and start cleanup again."
+            return
+        }
         do { try await coordinator.ledger.retry(job.id); await coordinator.run(updateNow: true); await reload() }
         catch { message = error.localizedDescription }
     }

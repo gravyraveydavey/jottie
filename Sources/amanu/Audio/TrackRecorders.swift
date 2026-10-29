@@ -1,4 +1,5 @@
 import Foundation
+import JottieModels
 
 /// What a `RecordingSession` needs from the recorder behind its mic track.
 ///
@@ -18,9 +19,14 @@ protocol MicTrackRecorder: AnyObject {
     var levelMeasurable: Bool { get }
     var isMuted: Bool { get set }
     var capture: MicRecorder.Capture { get }
+    var recordingContext: RecordingContext { get }
     var restarts: [MicRecorder.Restart] { get }
     func installLiveAudioSink(_ sink: LiveAudioBufferRelay.Sink?)
     func setLiveAudioPaused(_ paused: Bool)
+}
+
+extension MicTrackRecorder {
+    var recordingContext: RecordingContext { RecordingContext() }
 }
 
 /// What a `RecordingSession` needs from the recorder behind its system track.

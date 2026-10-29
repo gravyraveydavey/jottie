@@ -19,8 +19,8 @@ public actor JottieServer {
                  inputSchema: schema(["query": text, "folderID": text, "tag": text, "after": text, "before": text, "cursor": text, "limit": number]), annotations: annotations),
             Tool(name: "get_meeting", description: "Read a meeting summary, topics, actions, questions and revision. Use get_transcript for original evidence.",
                  inputSchema: schema(["meetingID": text], required: ["meetingID"]), annotations: annotations),
-            Tool(name: "get_transcript", description: "Read paginated original transcript segments and corrected speaker labels, with stable segment IDs.",
-                 inputSchema: schema(["meetingID": text, "cursor": text, "limit": number], required: ["meetingID"]), annotations: annotations),
+            Tool(name: "get_transcript", description: "Read paginated transcript segments and corrected speaker labels with stable IDs. view=current uses the reviewed transcript; view=original returns the retained source wording.",
+                 inputSchema: schema(["meetingID": text, "cursor": text, "limit": number, "view": .object(["type": .string("string"), "enum": .array([.string("current"), .string("original")])])], required: ["meetingID"]), annotations: annotations),
             Tool(name: "list_folders", description: "List the local logical folder tree and tag aliases.",
                  inputSchema: schema(["cursor": text, "limit": number]), annotations: annotations),
             Tool(name: "get_folder_context", description: "Read current folder knowledge, decision log, open actions and source references. Reports whether changes are pending.",
@@ -90,13 +90,19 @@ public actor JottieServer {
             result = ["meetingID": meeting.id.uuidString, "title": meeting.displayTitle, "date": ISO8601DateFormatter().string(from: meeting.startedAt),
                       "folderID": meeting.folderID?.uuidString as Any? ?? NSNull(), "analysis": try meeting.analysis.map(json) ?? NSNull(),
                       "importedSummary": meeting.importedSummary as Any? ?? NSNull(),
-                      "transcriptRevision": meeting.transcriptRevision, "source": "jottie://meeting/\(meeting.id)"]
+                      "transcriptRevision": meeting.transcriptRevision, "originalTranscriptRevision": meeting.originalTranscriptRevision,
+                      "cleanupRevision": meeting.activeCleanup?.id as Any? ?? NSNull(), "source": "jottie://meeting/\(meeting.id)"]
         case "get_transcript":
-            let meeting = try await store.meeting(uuid("meetingID"))
+            var meeting = try await store.meeting(uuid("meetingID"))
+            let view = try text("view") ?? "current"
+            guard ["current", "original"].contains(view) else { throw JottieError.invalid("Choose current or original transcript view.") }
+            let revision = view == "original" ? meeting.originalTranscriptRevision : meeting.transcriptRevision
+            if view == "original" { meeting.segments = meeting.originalTranscript }
             let parts = Array(meeting.segments.dropFirst(offset).prefix(limit))
             let displayNames = meeting.displaySpeakerNames
-            result = ["meetingID": meeting.id.uuidString, "revision": meeting.transcriptRevision,
-                      "segments": try json(parts), "speakerNames": meeting.speakerNames,
+            result = ["meetingID": meeting.id.uuidString, "revision": revision, "view": view,
+                      "cleanupRevision": meeting.activeCleanup?.id as Any? ?? NSNull(),
+                      "segments": try json(parts), "sourceSegmentIDs": (view == "original" ? [:] : (meeting.transcriptSourceSegmentIDs ?? [:])).filter { key, _ in parts.contains { $0.id == key } }, "speakerNames": meeting.speakerNames,
                       "speakerAttributions": try json((meeting.speakerAttributions ?? [:]).filter { key, _ in parts.contains { $0.id == key } }),
                       "displayNames": Dictionary(uniqueKeysWithValues: parts.map { ($0.id, displayNames[$0.id] ?? "Unknown speaker") }),
                       "speakerRevision": meeting.speakerRevision,

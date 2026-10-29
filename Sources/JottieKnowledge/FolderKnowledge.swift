@@ -137,7 +137,7 @@ public actor KnowledgeCoordinator {
             let contextService = contexts ?? CodexFolderContext(runner: runner, prompt: settings.folderContextPrompt, configurationRevision: settings.contextRevision)
             let folders = try await store.folders()
             let allAtStart = try await store.meetings()
-            let waiting = allAtStart.filter { $0.analysis == nil }
+            let waiting = allAtStart.filter { $0.analysis == nil && $0.sourceMetadata?["cleanupNeedsSummary"] != "true" }
             progressIDs = Set(waiting.map { "analysis:\($0.id):\($0.transcriptRevision):\(settings.analysisRevision)" })
             try await ledger.supersede(prefix: "analysis:", keeping: progressIDs)
             let checkContexts = updateNow || Date().timeIntervalSince(lastContextCheck) >= Double(settings.refreshMinutes * 60)
@@ -199,6 +199,42 @@ public actor KnowledgeCoordinator {
     public func processingProgress() async throws -> ProcessingProgress {
         let outstanding = Set(try await ledger.statuses().map(\.id))
         return try await ledger.progress(ids: progressIDs.union(outstanding))
+    }
+    /// A user-requested cleanup is independent of automatic summaries. The click
+    /// opts in to this text-only call without enabling background analysis.
+    public func prepareTranscriptCleanup(_ id: UUID, runner override: (any StructuredRunner)? = nil,
+                                         progress: @escaping @Sendable (Int, Int) async -> Void = { _, _ in }) async throws {
+        guard !busy else { throw JottieError.unavailable("Processing is running. Retry after it finishes.") }
+        busy = true; defer { busy = false }
+        let settings = try await store.settings()
+        let value = try await store.meeting(id)
+        let key = "cleanup:\(id):\(value.transcriptRevision)"
+        guard try await ledger.begin(key, stage: "Transcript cleanup preview", allowCompleted: true) else {
+            throw JottieError.unavailable("A cleanup is already running for this transcript.")
+        }
+        progressIDs.insert(key)
+        do {
+            var matches: [ParticipantIdentity]?
+            if settings.bambooEnabled, let company = try? BambooHR.company(settings.bambooCompany) {
+                let directory = try PeopleDirectory(root: store.root)
+                matches = try await directory.matching(value.directoryIdentityCandidates, company: company)
+            }
+            let runner = override ?? CodexRunner(executable: settings.codexPath, model: settings.codexModel, effort: settings.codexEffort)
+            let revision = try await TranscriptCleanupService(runner: runner).propose(for: value, model: settings.codexModel, effort: settings.codexEffort, directoryMatches: matches, progress: { [ledger] completed, total in
+                try? await ledger.reportSections(key, completed: completed, total: total)
+                await progress(completed, total)
+            })
+            try Task.checkCancellation()
+            try await store.saveCleanupDraft(revision, meetingID: id)
+            try await ledger.finish(key)
+        } catch {
+            // Manual cleanup never becomes an automatic retry or another upload.
+            // Retain failed operational history while removing it from the queue.
+            try? await ledger.fail(key, message: Self.message(error), retryable: false)
+            try? await ledger.supersede(prefix: key, keeping: [])
+            progressIDs.remove(key)
+            throw error
+        }
     }
     public func regenerate(_ id: UUID) async throws {
         guard !busy else { throw JottieError.unavailable("Processing is running. Retry after it finishes.") }
@@ -262,7 +298,7 @@ public actor KnowledgeCoordinator {
             }
             for meeting in all where meeting.folderID.map(subtree.contains) == true
                 && destinationFor(meeting.folderID) == destination && meeting.analysis != nil {
-                let key = "publish:\(Codec.hash((try? Codec.encode(destination)) ?? Data())):\(meeting.id):\(Codec.hash(try Codec.encode(meeting)))"
+                let key = "publish:\(Codec.hash((try? Codec.encode(destination)) ?? Data())):\(meeting.id):\(Codec.hash(try GraphPublisher.publicationMetadata(meeting)))"
                 guard try await ledger.begin(key, stage: "SharePoint publication") else { continue }
                 progressIDs.insert(key)
                 do {

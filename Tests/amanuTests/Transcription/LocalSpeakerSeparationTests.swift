@@ -68,6 +68,43 @@ import Testing
         let result = LocalSpeakerSeparation.applying(intervals, to: source, side: "me")
         #expect(result.map(\.speaker) == ["me", "me unknown"])
     }
+    private actor EchoingEngine: TranscriptionEngine {
+        nonisolated let name = "test"
+        nonisolated let model = "synthetic"
+        nonisolated let input: TranscriptionInput = .perTrack
+        func prepare() async throws {}
+        func release() async {}
+        func transcribe(_ audio: URL) async throws -> [TranscriptSegment] {
+            let text = "Please review the updated project schedule before our next meeting"
+            let words = text.split(separator: " ").enumerated().map {
+                TranscriptWord(start: Double($0.offset) * 0.3, end: Double($0.offset + 1) * 0.3, text: String($0.element))
+            }
+            var segments = [TranscriptSegment(start: 0, end: 3, text: text, words: words)]
+            if audio.lastPathComponent == "mic.caf" {
+                segments.append(TranscriptSegment(start: 4, end: 5, text: "Here is my own response"))
+            }
+            return segments
+        }
+    }
+    @Test(.freshHome) func residualCleanupAfterPerTrackSeparationKeepsOnlyOneCopyAndTheLocalResponse() async throws {
+        let root = try recording()
+        try FileManager.default.copyItem(at: root.appendingPathComponent("system.caf"), to: root.appendingPathComponent("mic.caf"))
+        try Data(#"{"files":{"mic":"mic.caf","system":"system.caf"},"start_offset_ms":{"mic":800},"started":"2026-10-27T09:00:00Z"}"#.utf8).write(to: root.appendingPathComponent("meta.json"))
+        let inputs = TranscriptionInputs(session: root, audio: root, meta: try SessionMeta.read(from: root), engine: EchoingEngine(), separateSpeakers: true,
+            speakerIntervals: { file in
+                if file.lastPathComponent == "mic.caf" {
+                    return (0..<10).map { i in
+                        SpeakerInterval(speaker: i.isMultiple(of: 2) ? "x" : "y", start: Double(i) * 0.3, end: Double(i + 1) * 0.3)
+                    } + [SpeakerInterval(speaker: "z", start: 4, end: 5)]
+                }
+                return [SpeakerInterval(speaker: "x", start: 0, end: 1.5), SpeakerInterval(speaker: "y", start: 1.5, end: 3)]
+            })
+        let separated = try await inputs.segments()
+        let result = EchoFilter.dropResidualEchoes(separated)
+        #expect(result.filter { $0.speaker.hasPrefix("me") }.map(\.text) == ["Here is my own response"])
+        #expect(result.filter { $0.speaker.hasPrefix("them") }.map(\.text).joined(separator: " ") == "Please review the updated project schedule before our next meeting")
+        #expect(result.first { $0.text == "Here is my own response" }?.start_ms == 4800)
+    }
     @Test(.freshHome) func missingSpeakerModelsKeepRecordingForRetry() async throws {
         let root = try recording()
         Config.update(path: ["transcription", "separate_speakers"], value: true)

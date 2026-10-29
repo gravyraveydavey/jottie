@@ -119,10 +119,16 @@ enum AudioProcesses {
     /// A process doing duplex I/O lists its output device here too (jottie's
     /// own voice-processing capture reports the speakers alongside the
     /// microphone), so callers filter by `AudioDevices.hasInput`.
+    static func outputDevices(of process: Process) -> [AudioObjectID] {
+        devices(of: process, scope: kAudioObjectPropertyScopeOutput)
+    }
     static func inputDevices(of process: Process) -> [AudioObjectID] {
+        devices(of: process, scope: kAudioObjectPropertyScopeInput)
+    }
+    private static func devices(of process: Process, scope: AudioObjectPropertyScope) -> [AudioObjectID] {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioProcessPropertyDevices,
-            mScope: kAudioObjectPropertyScopeInput,
+            mScope: scope,
             mElement: kAudioObjectPropertyElementMain
         )
         var size: UInt32 = 0

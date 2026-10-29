@@ -185,7 +185,7 @@ import JottieMCP
     func showRecordingSettings() {
         showSettings(); window?.model.settingsTab = "Recording"
     }
-    func stop() { ticker?.invalidate(); processing?.cancel() }
+    func stop() { ticker?.invalidate(); processing?.cancel(); window?.model.cancelTranscriptCleanup() }
 }
 
 struct CodexCommand: ParsableCommand {

@@ -9,6 +9,10 @@ import JottieLibrary
     @ViewState private var tab = "Summary"
     @ViewState private var copied = false
     @ViewState private var targetSegment: String?
+    @ViewState private var showOriginalTranscript = false
+    @ViewState private var transcriptTab = "Original transcript"
+    @ViewState private var cleanupSelection = Set<String>()
+    @ViewState private var cleanupSpeakers = Set<String>()
     private var folderName: String { model.folders.first { $0.id == meeting.folderID }?.name ?? "Import" }
     var body: some View {
         VStack(spacing: 0) {
@@ -37,7 +41,7 @@ import JottieLibrary
                         VStack(alignment: .leading, spacing: 0) {
                             HStack(spacing: 14) {
                                 ForEach([("Summary", "sparkles"), ("Transcript", "doc.text"), ("Speakers", "person.2")], id: \.0) { name, icon in
-                                    DocumentTab(title: name, icon: icon, selected: tab == name) { tab = name; copied = false }
+                                    DocumentTab(title: name, icon: icon, selected: tab == name, processing: name == "Transcript" && model.isCleaning(meeting)) { tab = name; copied = false }
                                 }
                                 Spacer(minLength: 0)
                             }
@@ -45,14 +49,27 @@ import JottieLibrary
                         }
                         if tab == "Summary" { summary }
                         else if tab == "Transcript" {
-                            transcript
+                            HStack(spacing: 18) {
+                                ForEach(["Original transcript", "Cleanup suggestions"], id: \.self) { name in
+                                    DocumentTab(title: name, icon: name == "Cleanup suggestions" ? "wand.and.stars" : "doc.text", selected: transcriptTab == name, processing: name == "Cleanup suggestions" && model.isCleaning(meeting)) { transcriptTab = name }
+                                }
+                                Spacer()
+                            }
+                            if transcriptTab == "Cleanup suggestions" {
+                                CleanupSuggestionsPane(model: model, meeting: meeting, selectedChanges: $cleanupSelection, selectedSpeakers: $cleanupSpeakers) { transcriptTab = "Original transcript" }
+                            } else { transcript }
                         } else { InlineSpeakers(model: model, meeting: meeting) }
-                    }.padding(.horizontal, 48).padding(.vertical, 44)
-                        .frame(maxWidth: 768, alignment: .leading).frame(maxWidth: .infinity)
+                    }.padding(.horizontal, tab == "Transcript" ? 24 : 48).padding(.vertical, 44)
+                        .frame(maxWidth: tab == "Transcript" ? .infinity : 768, alignment: .leading).frame(maxWidth: .infinity)
                 }
                 .onChange(of: targetSegment) { _, id in if let id { withAnimation { proxy.scrollTo(id, anchor: .center) } } }
             }
         }.background(JottieStyle.background).accessibilityElement(children: .contain).accessibilityLabel("Meeting detail")
+            .onChange(of: model.cleanupReviewMeeting?.cleanupDraft?.id) { _, _ in
+                if model.cleanupReviewMeeting?.id == meeting.id { tab = "Transcript"; transcriptTab = "Cleanup suggestions" }
+            }
+            .onChange(of: meeting.id) { _, _ in showOriginalTranscript = false; transcriptTab = "Original transcript" }
+            .onChange(of: meeting.transcriptRevision) { _, _ in showOriginalTranscript = false }
     }
     private var documentHeader: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -97,7 +114,8 @@ import JottieLibrary
     private var summaryStatus: String {
         if model.working { return "Processing · previous summary remains available" }
         guard let revision = meeting.analysis else { return "No generated summary yet" }
-        return revision.promptRevision == model.savedSettings.analysisRevision ? "Summary up to date" : "Earlier prompt · update available"
+        let basis = meeting.cleanupOriginalSegments == nil ? "Original transcript" : "Cleaned transcript"
+        return revision.promptRevision == model.savedSettings.analysisRevision ? "Summary up to date · \(basis)" : "Earlier prompt · update available"
     }
     private func findings(_ title: String, icon: String, items: [Finding]) -> some View {
         JottieSection(title: title, icon: icon, count: title == "Next steps" ? items.count : nil) {
@@ -122,10 +140,12 @@ import JottieLibrary
     }
     private var transcript: some View {
         LazyVStack(alignment: .leading, spacing: 30) {
-            Label(meeting.reconciledSpeakers.map(\.name).joined(separator: ", "), systemImage: "person.2")
+            TranscriptCleanupTools(model: model, meeting: meeting, showOriginal: $showOriginalTranscript) { transcriptTab = "Cleanup suggestions" }
+            let displayed = transcriptMeeting
+            Label(displayed.reconciledSpeakers.map(\.name).joined(separator: ", "), systemImage: "person.2")
                 .font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted)
-            let displayNames = meeting.displaySpeakerNames
-            ForEach(meeting.segments) { segment in
+            let displayNames = displayed.displaySpeakerNames
+            ForEach(displayed.segments) { segment in
                 HStack(alignment: .top, spacing: 18) {
                     Text(String(format: "%02d:%02d", segment.startMS / 60000, segment.startMS / 1000 % 60))
                         .font(JottieStyle.mono()).foregroundStyle(JottieStyle.muted).padding(.top, 1).frame(width: 38, alignment: .leading)
@@ -136,8 +156,13 @@ import JottieLibrary
                 }.padding(8).background(targetSegment == segment.id ? JottieStyle.selection : .clear, in: RoundedRectangle(cornerRadius: 8)).id(segment.id)
             }
             JottieRule()
-            Text("End of transcript · \(meeting.segments.count) segments").font(JottieStyle.font(11)).foregroundStyle(JottieStyle.muted)
+            Text("End of transcript · \(displayed.segments.count) segments").font(JottieStyle.font(11)).foregroundStyle(JottieStyle.muted)
         }
+    }
+    private var transcriptMeeting: Meeting {
+        var value = meeting
+        if showOriginalTranscript { value.segments = meeting.originalTranscript }
+        return value
     }
     private func prose(_ text: String) -> some View {
         Text(text).font(JottieStyle.font(14)).foregroundStyle(JottieStyle.muted).lineSpacing(9).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
@@ -151,7 +176,10 @@ import JottieLibrary
     }
     private func copy() {
         let text: String
-        if tab == "Transcript" { text = meeting.transcript }
+        if tab == "Transcript", transcriptTab == "Cleanup suggestions", let draft = meeting.cleanupDraft,
+           let proposed = try? draft.result.projectedSegments(against: meeting, selecting: cleanupSelection) {
+            var value = meeting; value.segments = proposed; text = value.transcript
+        } else if tab == "Transcript" { text = transcriptMeeting.transcript }
         else if tab == "Speakers" { text = meeting.reconciledSpeakers.map { "\($0.name) — \($0.jobTitle ?? "")" }.joined(separator: "\n") }
         else { text = meeting.markdown.components(separatedBy: "\n## Transcript\n").first ?? meeting.markdown }
         NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string); copied = true
@@ -162,14 +190,19 @@ struct DocumentTab: View {
     let title: String
     let icon: String
     let selected: Bool
+    var processing = false
     let action: () -> Void
     var body: some View {
         Button(action: action) {
             VStack(spacing: 10) {
-                Label(title, systemImage: icon).font(JottieStyle.font(14, selected ? .medium : .regular)).padding(.horizontal, 3)
+                HStack(spacing: 7) {
+                    if processing { ProgressView().controlSize(.mini).accessibilityHidden(true) }
+                    Label(title, systemImage: icon)
+                }.font(JottieStyle.font(14, selected ? .medium : .regular)).padding(.horizontal, 3)
                 Rectangle().fill(selected ? JottieStyle.foreground : .clear).frame(height: 2)
             }.foregroundStyle(selected ? JottieStyle.foreground : JottieStyle.muted).contentShape(Rectangle())
         }.buttonStyle(.plain).fixedSize(horizontal: true, vertical: false).help("Show \(title.lowercased())").accessibilityAddTraits(selected ? .isSelected : [])
+            .accessibilityLabel(title).accessibilityValue(processing ? "Transcript cleanup in progress" : "")
     }
 }
 

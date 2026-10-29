@@ -6,6 +6,7 @@
 // the locked LockedState below.
 @preconcurrency import AVFoundation
 import Foundation
+import JottieModels
 import os.lock
 
 /// Records the default input device to a mono PCM file via AVAudioEngine.
@@ -117,6 +118,36 @@ final class MicRecorder: @unchecked Sendable {
     private var finalVoiceProcessing = false
     private var initialInputDevice: String?
     private var initialOutputDevice: String?
+    private(set) var recordingContext = RecordingContext()
+    private var defaultOutputListener: AudioObjectPropertyListenerBlock?
+    private func captureAudioRoute() {
+        let outputs = Set(AudioProcesses.matching(families: followedCallApps).filter(\.runningOutput)
+            .flatMap { AudioProcesses.outputDevices(of: $0) }.filter { AudioDevices.hasOutput($0) })
+        let callOutput = outputs.count == 1 ? outputs.first : nil
+        let snapshot = AudioRouteContext(input: AudioDevices.context(of: boundDevice ?? AudioDevices.defaultInput(), input: true),
+            output: AudioDevices.context(of: callOutput ?? AudioDevices.defaultOutput(), input: false),
+            outputSource: callOutput != nil ? "call_app" : (outputs.count > 1 ? "ambiguous_call_app_system_default" : "system_default"))
+        if let last = recordingContext.routes.last, last.input == snapshot.input, last.output == snapshot.output,
+           last.outputSource == snapshot.outputSource { return }
+        recordingContext.routes.append(snapshot)
+    }
+    private func listenForOutputChanges() {
+        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        let listener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+            DispatchQueue.main.async { self?.captureAudioRoute() }
+        }
+        if AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &address, DispatchQueue.main, listener) == noErr {
+            defaultOutputListener = listener
+        }
+    }
+    private func stopListeningForOutputChanges() {
+        guard let listener = defaultOutputListener else { return }
+        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        AudioObjectRemovePropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &address, DispatchQueue.main, listener)
+        defaultOutputListener = nil
+    }
     private var captureSampleRate: Double?
     private var captureChannels: Int?
     private var captureSampleFormat: String?
@@ -287,6 +318,8 @@ final class MicRecorder: @unchecked Sendable {
         requestedVoiceProcessing = Config.micVoiceProcessing()
         try attachWithFallbacks(voiceProcessing: requestedVoiceProcessing, reusingFile: false)
         isRecording = true
+        recordingContext = RecordingContext()
+        captureAudioRoute()
         inputDevice = AudioDevices.name(of: boundDevice) ?? AudioDevices.defaultInputName()
         outputDevice = AudioDevices.defaultOutputName()
         initialVoiceProcessing = engine.inputNode.isVoiceProcessingEnabled
@@ -308,6 +341,7 @@ final class MicRecorder: @unchecked Sendable {
             self.handleConfigChange()
         }
         listenForDefaultInputChanges()
+        listenForOutputChanges()
     }
 
     /// Follow these call app families from now on. The route is re-examined
@@ -324,6 +358,7 @@ final class MicRecorder: @unchecked Sendable {
     /// session's own timer, because a call app can change device without
     /// anything system-wide changing at all.
     func checkRoute() {
+        if isRecording { captureAudioRoute() }
         guard isRecording, !restartPending else { return }
         guard let target = routeTarget(), target != boundDevice else { return }
         // Two questions a second apart: a route in the middle of changing
@@ -344,6 +379,7 @@ final class MicRecorder: @unchecked Sendable {
     /// Stop capturing and finalize the file. Idempotent.
     func stop() {
         guard isRecording else { return }
+        captureAudioRoute()
         isRecording = false
         finalVoiceProcessing = engine.inputNode.isVoiceProcessingEnabled
         if let configObserver {
@@ -351,6 +387,7 @@ final class MicRecorder: @unchecked Sendable {
             self.configObserver = nil
         }
         stopListeningForDefaultInputChanges()
+        stopListeningForOutputChanges()
         engine.stop()
         engine.inputNode.removeTap(onBus: 0)
         // Whatever a gap left queued belongs in the file before it is let go,
@@ -825,6 +862,7 @@ final class MicRecorder: @unchecked Sendable {
     /// Record what the route changed into, for meta.json and the run log.
     /// `gap_ms` is filled in by the first buffer, whenever that lands.
     private func noteRestart(_ index: Int) {
+        captureAudioRoute()
         // The microphone we are on, which is not always the default one —
         // that is the whole point of binding it.
         let input = AudioDevices.name(of: boundDevice) ?? AudioDevices.defaultInputName()

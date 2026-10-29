@@ -153,6 +153,15 @@ public actor LibraryStore: MeetingRepository {
             try Self.directory(dir.appendingPathComponent("Analysis"))
             try write(analysis, dir.appendingPathComponent("Analysis/\(analysis.id).json"))
         }
+        for (folder, revision) in [("CleanupProposals", meeting.cleanupDraft), ("CleanupHistory", meeting.activeCleanup)] {
+            if let revision {
+                guard UUID(uuidString: revision.id) != nil else { throw JottieError.invalid("Invalid cleanup revision ID.") }
+                let history = dir.appendingPathComponent(folder)
+                try Self.directory(history)
+                let path = history.appendingPathComponent(revision.id + ".json")
+                if !FileManager.default.fileExists(atPath: path.path) { try write(revision, path) }
+            }
+        }
         if let assignments = meeting.speakerAttributions {
             let history = dir.appendingPathComponent("SpeakerHistory")
             try Self.directory(history)
@@ -211,6 +220,128 @@ public actor LibraryStore: MeetingRepository {
             }
         }
     }
+    public func setRecordingContext(playback: String?, note: String, meetingID: UUID) throws {
+        guard playback == nil || ["speakers", "headphones", "unknown"].contains(playback!), note.count <= 4000 else {
+            throw JottieError.invalid("Unsupported recording context.")
+        }
+        try locked {
+            var value = try meeting(meetingID)
+            var context = value.recordingContext ?? RecordingContext()
+            context.playbackOverride = playback
+            context.userNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
+            value.recordingContext = context
+            try commit(value)
+        }
+    }
+    public func setCleanupPreferences(_ preferences: TranscriptCleanupPreferences, meetingID: UUID, expectedRevision: String) throws {
+        try preferences.validate()
+        try locked {
+            var value = try meeting(meetingID)
+            guard value.transcriptRevision == expectedRevision else { throw JottieError.conflict("Transcript changed. Reopen cleanup before continuing.") }
+            value.cleanupPreferences = preferences
+            try commit(value)
+        }
+    }
+    public func saveCleanupDraft(_ revision: TranscriptCleanupRevision, meetingID: UUID) throws {
+        try locked {
+            var value = try meeting(meetingID)
+            try Self.validateCleanupBase(revision, meeting: value)
+            try revision.result.validate(against: value)
+            guard revision.selectedChangeIDs == nil, revision.selectedSpeakerIDs == nil else {
+                throw JottieError.invalid("An applied cleanup cannot become a draft.")
+            }
+            value.cleanupDraft = revision
+            try commit(value)
+        }
+    }
+    private static func validateCleanupBase(_ revision: TranscriptCleanupRevision, meeting: Meeting) throws {
+        guard UUID(uuidString: revision.id) != nil, revision.baseRevision == meeting.transcriptRevision,
+              revision.contextRevision == meeting.cleanupContextRevision else {
+            throw JottieError.conflict("Transcript, speakers or recording context changed. Generate a fresh cleanup preview.")
+        }
+    }
+    public func discardCleanupDraft(meetingID: UUID) throws {
+        try locked { var value = try meeting(meetingID); value.cleanupDraft = nil; try commit(value) }
+    }
+    public func applyCleanup(meetingID: UUID, draftID: String, changeIDs: Set<String>, speakerIDs: Set<String>) throws {
+        try locked {
+            var value = try meeting(meetingID)
+            guard var revision = value.cleanupDraft, revision.id == draftID else { throw JottieError.conflict("This cleanup preview is no longer current.") }
+            try Self.validateCleanupBase(revision, meeting: value)
+            try revision.result.validate(against: value)
+            guard !changeIDs.isEmpty || !speakerIDs.isEmpty,
+                  changeIDs.isSubset(of: Set(revision.result.changes.map(\.id))),
+                  speakerIDs.isSubset(of: Set(revision.result.speakerSuggestions.map(\.id))) else {
+                throw JottieError.invalid("Choose changes from the current cleanup preview.")
+            }
+            let changes = revision.result.changes.filter { changeIDs.contains($0.id) }
+            let updated = try revision.result.projectedSegments(against: value, selecting: changeIDs)
+            var sourceMap = value.transcriptSourceSegmentIDs ?? [:]
+            for change in changes where !change.replacementText.isEmpty {
+                sourceMap[change.segmentID] = change.sourceIDs.flatMap { value.transcriptSourceSegmentIDs?[$0] ?? [$0] }
+            }
+            guard !updated.isEmpty else { throw JottieError.invalid("Cleanup cannot remove the whole transcript.") }
+            let remaining = Set(updated.map(\.id))
+            var assigned = Set<String>()
+            let mergedOwners = Dictionary(uniqueKeysWithValues: changes.filter { !$0.replacementText.isEmpty }.flatMap { change in change.sourceIDs.map { ($0, change.segmentID) } })
+            for suggestion in revision.result.speakerSuggestions where speakerIDs.contains(suggestion.id) {
+                var targets = Set<String>()
+                for id in suggestion.segmentIDs {
+                    let target = mergedOwners[id] ?? id
+                    guard remaining.contains(target),
+                          let original = value.segments.first(where: { $0.id == id }),
+                          value.speakerAttributions?[id]?.method != "manual",
+                          value.speakerNames[original.speaker]?.isEmpty != false,
+                          !value.hasNamedSourceLabel(original.speaker) else {
+                        throw JottieError.conflict("A speaker suggestion overlaps another selection, a removed passage or an existing manual assignment.")
+                    }
+                    if targets.insert(target).inserted, !assigned.insert(target).inserted {
+                        throw JottieError.conflict("Speaker suggestions overlap. Select one identity per passage.")
+                    }
+                    let people = (value.participantContext ?? []).filter { NameAliases.normalise($0.name) == NameAliases.normalise(suggestion.name) }
+                    let person = people.count == 1 ? people.first : nil
+                    value.speakerAttributions = value.speakerAttributions ?? [:]
+                    value.speakerAttributions?[id] = SpeakerAttribution(name: suggestion.name, jobTitle: person?.jobTitle,
+                        employeeID: person?.employeeID, method: "manual", confidence: suggestion.confidence,
+                        basis: ["reviewed_cleanup"], evidence: suggestion.evidence, analysisRevision: revision.id)
+                    let assignment = value.speakerAttributions?[id]
+                    value.speakerAttributions?[target] = assignment
+                }
+            }
+            if updated != value.segments {
+                if value.cleanupOriginalSegments == nil { value.cleanupOriginalSegments = value.segments }
+                value.transcriptSourceSegmentIDs = sourceMap.filter { key, _ in updated.contains { $0.id == key } }
+                value.segments = updated
+                value.transcriptRevision = Codec.hash(try Codec.encode(updated))
+                value.analysis = nil
+                value.sourceMetadata = value.sourceMetadata ?? [:]
+                value.sourceMetadata?["cleanupNeedsSummary"] = "true"
+                // Only manual assignments survive a change to transcript evidence.
+                value.speakerAttributions = value.speakerAttributions?.filter { $0.value.method == "manual" }
+            }
+            revision.selectedChangeIDs = changeIDs.sorted(); revision.selectedSpeakerIDs = speakerIDs.sorted()
+            value.activeCleanup = revision; value.cleanupDraft = nil
+            try commit(value)
+        }
+    }
+    public func restoreOriginalTranscript(meetingID: UUID, expectedRevision: String) throws {
+        try locked {
+            var value = try meeting(meetingID)
+            guard value.transcriptRevision == expectedRevision else { throw JottieError.conflict("Transcript changed. Reopen it before restoring.") }
+            guard let original = value.cleanupOriginalSegments else { return }
+            value.segments = original; value.transcriptRevision = Codec.hash(try Codec.encode(original))
+            value.cleanupOriginalSegments = nil; value.transcriptSourceSegmentIDs = nil; value.activeCleanup = nil; value.cleanupDraft = nil; value.analysis = nil
+            value.sourceMetadata = value.sourceMetadata ?? [:]; value.sourceMetadata?["cleanupNeedsSummary"] = "true"
+            value.speakerAttributions = value.speakerAttributions?.filter { $0.value.method == "manual" }
+            try commit(value)
+        }
+    }
+    public func cleanupHistory(meetingID: UUID) throws -> [TranscriptCleanupRevision] {
+        let directory = meetingDirectory(meetingID).appendingPathComponent("CleanupHistory")
+        guard FileManager.default.fileExists(atPath: directory.path) else { return [] }
+        return try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "json" }.map { try read(TranscriptCleanupRevision.self, $0) }.sorted { $0.createdAt > $1.createdAt }
+    }
     public func setStarred(_ starred: Bool, meetingID: UUID) throws {
         try locked {
             var value = try meeting(meetingID)
@@ -240,7 +371,9 @@ public actor LibraryStore: MeetingRepository {
             let ids = Set(value.segments.map(\.id))
             guard !segmentIDs.isEmpty, Set(segmentIDs).isSubset(of: ids) else { throw JottieError.invalid("Unknown transcript passage.") }
             var assignments = value.speakerAttributions ?? [:]
-            for id in segmentIDs {
+            let originalIDs = Set(value.originalTranscript.map(\.id))
+            let targets = Set(segmentIDs.flatMap { [ $0 ] + (value.transcriptSourceSegmentIDs?[$0] ?? []) })
+            for id in targets where ids.contains(id) || originalIDs.contains(id) {
                 assignments[id] = SpeakerAttribution(name: name.trimmingCharacters(in: .whitespacesAndNewlines),
                     jobTitle: role, employeeID: employeeID, method: "manual")
             }
@@ -280,6 +413,7 @@ public actor LibraryStore: MeetingRepository {
             try revision.analysis.validate(segments: value.segments)
             value = SpeakerReconciliation.applying(revision, to: value)
             value.analysis = revision
+            value.sourceMetadata?["cleanupNeedsSummary"] = nil
             if !value.manuallyFiled {
                 let tag = revision.analysis.primaryTag.map(Self.normalise)
                 let matches = try folders().filter { folder in
@@ -602,6 +736,24 @@ public actor LibraryStore: MeetingRepository {
                                 "recordingApp": meta["app"] as? String, "trigger": meta["trigger"] as? String,
                                 "speakerSeparation": meta["local_speaker_separation"] as? String,
                                 "transcriptSHA256": Codec.hash(data)].compactMapValues { $0 }
+        if let context = meta["recording_context"], let data = try? JSONSerialization.data(withJSONObject: context) {
+            value.recordingContext = try? Codec.decode(RecordingContext.self, from: data)
+        }
+        if value.recordingContext == nil, let capture = meta["mic_capture"] as? [String: Any] {
+            var context = RecordingContext()
+            context.routes = [AudioRouteContext(at: started,
+                input: AudioDeviceContext(name: capture["input_device"] as? String, source: "legacy_capture"),
+                output: AudioDeviceContext(name: capture["output_device"] as? String, source: "legacy_capture"), outputSource: "system_default")]
+            value.recordingContext = context
+        }
+        if let cancellation = meta["audio_echo_cancellation"] as? [String: Any] {
+            if value.recordingContext == nil { value.recordingContext = RecordingContext() }
+            value.recordingContext?.echoCancellation = cancellation["processor"] as? String
+        }
+        if let filter = meta["echo_filter"] as? [String: Any], let count = filter["dropped_segments"] as? Int {
+            if value.recordingContext == nil { value.recordingContext = RecordingContext() }
+            value.recordingContext?.echoSegmentsRemoved = count
+        }
         if let summary = try? Data(contentsOf: directory.appendingPathComponent("summary.md")), summary.count <= 8_000_000 {
             value.importedSummary = String(data: summary, encoding: .utf8)
         }
@@ -627,7 +779,9 @@ public actor LibraryStore: MeetingRepository {
             if var existing = all.first(where: { $0.sourceID == sourceID || ($0.transcriptRevision == value.transcriptRevision && $0.startedAt == started) }) {
                 try keepOriginal(existing.id)
                 var changed = false
-                if existing.transcriptRevision != value.transcriptRevision {
+                let originalRevision = existing.cleanupOriginalSegments.map { Codec.hash((try? Codec.encode($0)) ?? Data()) }
+                if existing.transcriptRevision != value.transcriptRevision && originalRevision != value.transcriptRevision {
+                    existing.cleanupOriginalSegments = nil; existing.transcriptSourceSegmentIDs = nil; existing.activeCleanup = nil; existing.cleanupDraft = nil
                     existing.speakerAttributions = existing.speakerAttributions?.filter { id, attribution in
                         attribution.method == "manual" && existing.segments.first(where: { $0.id == id }) == value.segments.first(where: { $0.id == id })
                     }
@@ -639,6 +793,11 @@ public actor LibraryStore: MeetingRepository {
                     existing.sourceMetadata = value.sourceMetadata
                     existing.importedSummary = value.importedSummary
                     changed = true
+                }
+                if var context = value.recordingContext {
+                    context.playbackOverride = existing.recordingContext?.playbackOverride
+                    context.userNote = existing.recordingContext?.userNote
+                    if existing.recordingContext != context { existing.recordingContext = context; changed = true }
                 }
                 if existing.calendarContextManuallySet != true, value.calendarContext != nil || !value.participants.isEmpty {
                     if existing.participants != value.participants { existing.participants = value.participants; existing.participantContext = nil; changed = true }
@@ -722,6 +881,8 @@ public actor LibraryStore: MeetingRepository {
     private func replaceDocumentSegments(in value: inout Meeting, with segments: [Segment]) throws {
         let revision = Codec.hash(try Codec.encode(segments))
         guard value.transcriptRevision != revision else { return }
+        value.cleanupOriginalSegments = nil; value.transcriptSourceSegmentIDs = nil; value.activeCleanup = nil; value.cleanupDraft = nil
+        value.sourceMetadata?["cleanupNeedsSummary"] = nil
         let previous = Dictionary(uniqueKeysWithValues: value.segments.map { ($0.id, $0) })
         let current = Dictionary(uniqueKeysWithValues: segments.map { ($0.id, $0) })
         value.speakerAttributions = value.speakerAttributions?.filter { id, attribution in

@@ -8,6 +8,13 @@ public struct WorkStatus: Sendable, Identifiable {
     public var state: String
     public var attempts: Int
     public var message: String?
+    public var completedSections: Int?
+    public var totalSections: Int?
+    public var isTranscriptCleanup: Bool { id.hasPrefix("cleanup:") }
+    public var sectionProgress: String? {
+        guard let completedSections, let totalSections, totalSections > 0 else { return nil }
+        return completedSections == totalSections ? "Preparing review…" : "Cleaning section \(completedSections + 1) of \(totalSections)…"
+    }
 }
 
 public struct ProcessingProgress: Sendable, Equatable {
@@ -23,14 +30,24 @@ public actor WorkLedger {
     private let queue: DatabaseQueue
     public init(root: URL) throws {
         try LibraryStore.directory(root)
-        queue = try DatabaseQueue(path: root.appendingPathComponent("work.sqlite").path)
-        try queue.write { db in
+        var configuration = Configuration()
+        configuration.busyMode = .timeout(5)
+        queue = try DatabaseQueue(path: root.appendingPathComponent("work.sqlite").path, configuration: configuration)
+        let columns = try queue.read { db in
+            try db.tableExists("jobs") ? db.columns(in: "jobs").map(\.name) : []
+        }
+        if !columns.contains("completedSections") || !columns.contains("totalSections") {
+          try queue.write { db in
             try db.execute(sql: """
                 CREATE TABLE IF NOT EXISTS jobs (
                     id TEXT PRIMARY KEY, stage TEXT NOT NULL, state TEXT NOT NULL,
                     attempts INTEGER NOT NULL DEFAULT 0, next REAL NOT NULL DEFAULT 0,
                     message TEXT, receipt BLOB);
                 """)
+            let columns = try db.columns(in: "jobs").map(\.name)
+            if !columns.contains("completedSections") { try db.execute(sql: "ALTER TABLE jobs ADD COLUMN completedSections INTEGER") }
+            if !columns.contains("totalSections") { try db.execute(sql: "ALTER TABLE jobs ADD COLUMN totalSections INTEGER") }
+          }
         }
     }
     public func begin(_ id: String, stage: String, now: Date = Date(), allowCompleted: Bool = false) throws -> Bool {
@@ -43,9 +60,17 @@ public actor WorkLedger {
                   (row["state"] as String) != "done", (row["state"] as String) != "held",
                   (row["next"] as Double) <= now.timeIntervalSince1970
             else { return false }
-            try db.execute(sql: "UPDATE jobs SET state='running', attempts=attempts+1, next=? WHERE id=?",
+            try db.execute(sql: "UPDATE jobs SET state='running', attempts=attempts+1, message=NULL, completedSections=NULL,totalSections=NULL, next=? WHERE id=?",
                            arguments: [now.addingTimeInterval(3600).timeIntervalSince1970, id])
             return true
+        }
+    }
+    /// Persist section progress so every queue reader sees the same operation.
+    public func reportSections(_ id: String, completed: Int, total: Int) throws {
+        guard total > 0, (0...total).contains(completed) else { throw JottieError.invalid("Invalid cleanup progress.") }
+        try queue.write { db in
+            try db.execute(sql: "UPDATE jobs SET completedSections=?,totalSections=? WHERE id=? AND state='running'",
+                           arguments: [completed, total, id])
         }
     }
     public func finish(_ id: String, receipt: Data? = nil) throws {
@@ -70,7 +95,7 @@ public actor WorkLedger {
     public func statuses() throws -> [WorkStatus] {
         try queue.read { db in
             try Row.fetchAll(db, sql: "SELECT * FROM jobs WHERE state NOT IN ('done','superseded') ORDER BY stage,id").map {
-                WorkStatus(id: $0["id"], stage: $0["stage"], state: $0["state"], attempts: $0["attempts"], message: $0["message"])
+                WorkStatus(id: $0["id"], stage: $0["stage"], state: $0["state"], attempts: $0["attempts"], message: $0["message"], completedSections: $0["completedSections"], totalSections: $0["totalSections"])
             }
         }
     }

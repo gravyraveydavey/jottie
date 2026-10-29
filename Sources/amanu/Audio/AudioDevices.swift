@@ -1,5 +1,6 @@
 import CoreAudio
 import Foundation
+import JottieModels
 
 /// The devices macOS is routing through, by name and by identity.
 ///
@@ -46,6 +47,47 @@ enum AudioDevices {
         channels(of: device, scope: kAudioObjectPropertyScopeInput) > 0
     }
 
+    static func hasOutput(_ device: AudioObjectID) -> Bool {
+        channels(of: device, scope: kAudioObjectPropertyScopeOutput) > 0
+    }
+    static func context(of device: AudioObjectID?, input: Bool) -> AudioDeviceContext {
+        guard let device else { return AudioDeviceContext() }
+        let transport = uint32(device, selector: kAudioDevicePropertyTransportType)
+        let connection: String
+        switch transport {
+        case kAudioDeviceTransportTypeBuiltIn: connection = "built_in"
+        case kAudioDeviceTransportTypeUSB: connection = "usb"
+        case kAudioDeviceTransportTypeBluetooth, kAudioDeviceTransportTypeBluetoothLE: connection = "bluetooth"
+        case kAudioDeviceTransportTypeHDMI, kAudioDeviceTransportTypeDisplayPort: connection = "display"
+        case kAudioDeviceTransportTypeAirPlay: connection = "airplay"
+        case kAudioDeviceTransportTypeVirtual, kAudioDeviceTransportTypeAggregate: connection = "virtual_or_aggregate"
+        default: connection = "unknown"
+        }
+        var address = propertyAddress(kAudioDevicePropertyStreams, scope: input ? kAudioObjectPropertyScopeInput : kAudioObjectPropertyScopeOutput)
+        var size: UInt32 = 0
+        var streams: [AudioObjectID] = []
+        if AudioObjectGetPropertyDataSize(device, &address, 0, nil, &size) == noErr, size > 0 {
+            streams = [AudioObjectID](repeating: 0, count: Int(size) / MemoryLayout<AudioObjectID>.size)
+            if AudioObjectGetPropertyData(device, &address, 0, nil, &size, &streams) != noErr { streams = [] }
+        }
+        let terminals = Set(streams.compactMap { uint32($0, selector: kAudioStreamPropertyTerminalType) })
+        let kind = classify(terminals: terminals)
+        return AudioDeviceContext(name: name(of: device), transport: connection, kind: kind,
+            source: kind == "unknown" ? "unknown" : "core_audio_terminal")
+    }
+    /// A transport describes the connection, never the physical output kind.
+    static func classify(terminals: Set<UInt32>) -> String {
+        if terminals == [kAudioStreamTerminalTypeHeadphones] { return "headphones" }
+        if terminals == [kAudioStreamTerminalTypeSpeaker] { return "speakers" }
+        if terminals == [kAudioStreamTerminalTypeMicrophone] || terminals == [kAudioStreamTerminalTypeHeadsetMicrophone] { return "microphone" }
+        return "unknown"
+    }
+    private static func uint32(_ object: AudioObjectID, selector: AudioObjectPropertySelector) -> UInt32? {
+        var address = propertyAddress(selector)
+        var value: UInt32 = 0, size = UInt32(MemoryLayout<UInt32>.size)
+        guard AudioObjectGetPropertyData(object, &address, 0, nil, &size, &value) == noErr else { return nil }
+        return value
+    }
     // MARK: -
 
     private static func propertyAddress(

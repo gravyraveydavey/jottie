@@ -160,6 +160,12 @@ public struct Meeting: Codable, Sendable, Equatable, Identifiable {
     public var participantContext: [ParticipantIdentity]?
     public var speakerRoles: [String: String]?
     public var speakerAttributions: [String: SpeakerAttribution]?
+    public var recordingContext: RecordingContext?
+    public var cleanupDraft: TranscriptCleanupRevision?
+    public var activeCleanup: TranscriptCleanupRevision?
+    public var cleanupOriginalSegments: [Segment]?
+    public var cleanupPreferences: TranscriptCleanupPreferences?
+    public var transcriptSourceSegmentIDs: [String: [String]]?
     public init(id: UUID = UUID(), sourceID: String, title: String, startedAt: Date = Date(),
                 segments: [Segment], participants: [String] = [], speakerNames: [String: String] = [:]) {
         self.id = id; self.sourceID = sourceID; self.title = title; self.startedAt = startedAt
@@ -178,6 +184,9 @@ public struct Meeting: Codable, Sendable, Equatable, Identifiable {
     }
     public var markdown: String {
         var text = "# \(displayTitle)\n\nMeeting: \(id)\nDate: \(ISO8601DateFormatter().string(from: startedAt))\n"
+        if let cleanup = activeCleanup {
+            text += "Transcript: reviewed cleanup from \(ISO8601DateFormatter().string(from: cleanup.createdAt))\nTranscript revision: \(transcriptRevision)\nOriginal revision: \(originalTranscriptRevision)\n"
+        }
         if let analysis = analysis?.analysis {
             text += "\n## Summary\n\n\(analysis.summary)\n\nTags: \(analysis.tags.joined(separator: ", "))\n"
             if !analysis.topics.isEmpty { text += "\n## Topics\n\n" + analysis.topics.map { "- \($0)" }.joined(separator: "\n") + "\n" }

@@ -16,11 +16,11 @@ import JottieLibrary
                     Spacer()
                     Button { Task { await model.updateNow() } } label: {
                         Label(model.working ? "Processing" : "Process queue", systemImage: "play")
-                    }.buttonStyle(JottieButtonStyle(kind: .primary)).disabled(model.working || model.jobs.isEmpty)
+                    }.buttonStyle(JottieButtonStyle(kind: .primary)).disabled(model.working || model.cleanupProcessingID != nil || model.jobs.contains { $0.isTranscriptCleanup && $0.state == "running" } || model.jobs.isEmpty)
                 }
                 if model.progress.total > 0 || !model.jobs.isEmpty {
                   VStack(alignment: .leading, spacing: 12) {
-                    Text("Summaries & knowledge").font(JottieStyle.font(17, .semibold))
+                    Text("Transcript cleanup, summaries & knowledge").font(JottieStyle.font(17, .semibold))
                     HStack {
                         Text(model.progress.label)
                         Spacer()
@@ -58,7 +58,7 @@ import JottieLibrary
                     }
                 }
                 if model.jobs.isEmpty && model.capture.transcriptionItems.isEmpty && model.capture.mediaImport == nil && model.capture.transcription == nil {
-                    JottieEmpty(title: "Everything is up to date", message: "Imported recordings, transcription, analysis, folder context and publication jobs will appear here.", icon: "checkmark")
+                    JottieEmpty(title: "Everything is up to date", message: "Imported recordings, transcription, transcript cleanup, analysis, folder context and publication jobs will appear here.", icon: "checkmark")
                 } else if !model.jobs.isEmpty {
                     LazyVStack(spacing: 0) {
                         ForEach(model.jobs) { job in
@@ -86,10 +86,23 @@ import JottieLibrary
                 }.buttonStyle(.plain).font(JottieStyle.font(14, .medium))
                 Text("\(job.stage.capitalized) · Attempt \(job.attempts)").font(JottieStyle.font(11)).foregroundStyle(JottieStyle.muted)
                 if let message = job.message { Text(message).font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted).textSelection(.enabled).fixedSize(horizontal: false, vertical: true) }
+                if let label = job.sectionProgress {
+                    Text(label).font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted)
+                    ProgressView(value: Double(job.completedSections ?? 0), total: Double(max(1, job.totalSections ?? 1))).tint(JottieStyle.accent)
+                        .accessibilityLabel("Cleanup sections completed")
+                }
             }.frame(maxWidth: .infinity, alignment: .leading)
             VStack(alignment: .trailing, spacing: 8) {
-                JottieBadge(text: job.state == "running" ? "Processing" : job.state.capitalized, outlined: true)
-                Button("Retry") { Task { await model.retry(job) } }.buttonStyle(JottieButtonStyle(kind: .outline, compact: true)).disabled(job.state == "running" || model.working)
+                HStack(spacing: 6) {
+                    if job.state == "running" { ProgressView().controlSize(.small) }
+                    JottieBadge(text: job.state == "running" ? "Processing" : job.state.capitalized, outlined: true)
+                }
+                if job.isTranscriptCleanup, job.state == "running", model.cleanupProcessingID == id {
+                    Button("Cancel cleanup") { model.cancelTranscriptCleanup() }.buttonStyle(JottieButtonStyle(kind: .outline, compact: true))
+                }
+                if job.state != "running" || !job.isTranscriptCleanup {
+                    Button(job.isTranscriptCleanup ? "Review cleanup options" : "Retry") { Task { await model.retry(job) } }.buttonStyle(JottieButtonStyle(kind: .outline, compact: true)).disabled(job.state == "running" || model.working)
+                }
             }
         }.padding(16)
     }
