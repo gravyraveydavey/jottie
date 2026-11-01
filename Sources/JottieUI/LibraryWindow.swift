@@ -108,7 +108,9 @@ typealias ViewState<Value> = SwiftUI.State<Value>
                     navigationRow("Queue", icon: "checklist", location: "queue", count: model.jobs.count + model.capture.transcriptionItems.count)
                     navigationRow("Trash", icon: "trash", location: "trash", count: model.trash.count)
                     sidebarHeading("Folders").padding(.top, 28)
-                    ForEach(visibleFolders, id: \.folder.id) { item in folderRow(item.folder, depth: item.depth) }
+                    VStack(spacing: 0) {
+                        ForEach(SidebarFolderEntry.visible(model.folders, collapsed: collapsed)) { item in folderRow(item) }
+                    }
                 }.padding(.horizontal, 12)
             }
             VStack(spacing: 16) {
@@ -140,32 +142,19 @@ typealias ViewState<Value> = SwiftUI.State<Value>
         }.buttonStyle(SidebarRowStyle(selected: model.location == location))
             .accessibilityAddTraits(model.location == location ? .isSelected : [])
     }
-    private var visibleFolders: [(folder: Folder, depth: Int)] {
-        model.flatFolders.filter { item in
-            var parent = item.folder.parentID
-            var visited = Set<UUID>()
-            while let id = parent, visited.insert(id).inserted {
-                if collapsed.contains(id) { return false }
-                parent = model.folders.first { $0.id == id }?.parentID
-            }
-            return true
-        }
-    }
-    private func folderRow(_ folder: Folder, depth: Int) -> some View {
-        HStack(spacing: 0) {
-            if depth > 0 {
-                Rectangle().fill(JottieStyle.border).frame(width: 1).padding(.leading, CGFloat(depth * 20 - 2))
-                    .overlay(alignment: .trailing) { Rectangle().fill(JottieStyle.border).frame(width: 10, height: 1).offset(x: 9) }
-            }
+    private func folderRow(_ item: SidebarFolderEntry) -> some View {
+        let folder = item.folder
+        return HStack(spacing: 0) {
             Button { model.navigate(folder.id.uuidString) } label: {
                 HStack(spacing: 9) {
-                    Image(systemName: model.location == folder.id.uuidString ? "folder.fill" : "folder").frame(width: 16)
+                    Image(systemName: model.location == folder.id.uuidString ? "folder.fill" : "folder").frame(width: 16, height: 16)
                     Text(folder.name).lineLimit(1); Spacer(minLength: 0)
                     if !model.folders.contains(where: { $0.parentID == folder.id }) {
                         Text(String(model.folderMeetings(folder).count)).font(JottieStyle.font(11, .medium))
                     }
-                }.padding(.horizontal, 9).frame(height: 34).contentShape(Rectangle())
+                }.padding(.horizontal, 9).frame(height: 30).contentShape(Rectangle())
             }.buttonStyle(SidebarRowStyle(selected: model.location == folder.id.uuidString))
+                .padding(.leading, CGFloat(item.depth) * FolderTreeBranches.indent)
             if model.folders.contains(where: { $0.parentID == folder.id }) {
                 Button {
                     withAnimation(.easeInOut(duration: 0.16)) {
@@ -176,6 +165,8 @@ typealias ViewState<Value> = SwiftUI.State<Value>
                 .accessibilityLabel("Toggle \(folder.name) subfolders")
             }
         }
+        .frame(height: 30)
+        .overlay { FolderTreeBranches(entry: item).stroke(JottieStyle.border, lineWidth: 1).allowsHitTesting(false) }
         .draggable("folder:\(folder.id.uuidString)")
         .dropDestination(for: String.self) { values, _ in model.drop(values, into: folder.id) }
         .contextMenu {
@@ -193,12 +184,15 @@ typealias ViewState<Value> = SwiftUI.State<Value>
                 Spacer(minLength: 8)
                 Button { Task { await model.updateSummaries() } } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                        Text(model.working ? "Updating…" : "Update summaries")
-                        if model.updateCount > 0 { JottieBadge(text: String(model.updateCount)) }
+                        if model.updatingAllSummaries { ProgressView().controlSize(.mini).accessibilityHidden(true) }
+                        else { Image(systemName: "arrow.triangle.2.circlepath") }
+                        Text(model.updatingAllSummaries ? "Updating all summaries…" : "Update all summaries")
+                        if !model.working && model.updateCount > 0 {
+                            JottieBadge(text: String(model.updateCount)).help("\(model.outdatedMeetings.count) meeting summaries and \(model.staleFolders.count) folder contexts need updating")
+                        }
                     }
                 }.buttonStyle(JottieButtonStyle()).disabled(model.working || model.settingsDirty)
-                    .help("Update missing summaries and summaries using an earlier prompt")
+                    .help("Update missing and outdated summaries across the entire library, then refresh folder contexts. The badge counts summaries and folder contexts needing updates.")
                 Button { model.importTranscripts() } label: { HStack(spacing: 6) { JottieImportIcon(); Text("Import") } }
                     .buttonStyle(JottieButtonStyle(kind: .outline)).help("Import audio, video, transcript folders, Markdown, text or Word documents")
                 Button { model.onRecord?() } label: { Label(model.capture.isRecording ? "Stop recording" : "New recording", systemImage: model.capture.isRecording ? "stop.circle" : "mic") }

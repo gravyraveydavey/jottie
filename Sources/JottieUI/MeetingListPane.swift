@@ -32,7 +32,7 @@ import JottieLibrary
                                 Text(dayLabel(group.id)).font(JottieStyle.font(11, .medium)).foregroundStyle(JottieStyle.muted)
                                     .padding(.horizontal, 12).padding(.top, 14).padding(.bottom, 6)
                                 ForEach(group.hits) { hit in
-                                    MeetingCard(hit: hit, selected: model.selection.contains(hit.id), searching: !model.query.isEmpty) {
+                                    MeetingCard(hit: hit, selected: model.selection.contains(hit.id), searching: !model.query.isEmpty, processingStatus: model.processingStatus(for: hit.meeting)) {
                                         listFocused = true
                                         let modifiers = NSEvent.modifierFlags
                                         model.select(hit.id, extending: modifiers.contains(.command), range: modifiers.contains(.shift))
@@ -42,6 +42,7 @@ import JottieLibrary
                                         Button(hit.meeting.starred == true ? "Unstar meeting" : "Star meeting") { Task { await model.toggleStar(hit.meeting) } }
                                         Button("Export Markdown…") { if !model.selection.contains(hit.id) { model.select(hit.id) }; model.export() }
                                         Button("Regenerate summary") { Task { await model.regenerate(hit.meeting) } }
+                                            .disabled(model.working || model.isSummarizing(hit.meeting))
                                         Menu("Move to folder") {
                                             Button("Import (unfiled)") { Task { await model.move([hit.id], to: nil) } }
                                             ForEach(model.flatFolders, id: \.folder.id) { item in
@@ -174,6 +175,7 @@ private struct MeetingCard: View {
     let hit: SearchHit
     let selected: Bool
     let searching: Bool
+    let processingStatus: String?
     let action: () -> Void
     @ViewState private var hovering = false
     var body: some View {
@@ -182,10 +184,14 @@ private struct MeetingCard: View {
                 HStack(alignment: .top, spacing: 8) {
                     Text(hit.meeting.displayTitle).font(JottieStyle.font(13, .semibold)).lineLimit(2).lineSpacing(3)
                     Spacer(minLength: 0)
+                    if let processingStatus {
+                        ProgressView().controlSize(.mini).help(processingStatus).accessibilityLabel(processingStatus)
+                    }
                     if hit.meeting.starred == true { Image(systemName: "star.fill").font(.system(size: 10)).foregroundStyle(JottieStyle.accent.opacity(0.75)) }
                 }
                 Text(searching ? hit.snippet : hit.meeting.analysis?.analysis.summary ?? hit.meeting.importedSummary ?? hit.snippet)
                     .font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted).lineLimit(2).lineSpacing(6)
+                if let processingStatus { Text(processingStatus).font(JottieStyle.font(11)).foregroundStyle(JottieStyle.accent) }
                 HStack(spacing: 6) {
                     Text(hit.meeting.startedAt.formatted(.dateTime.hour().minute()))
                     if let duration = hit.meeting.durationLabel { Text("·"); Text(duration) }
@@ -198,7 +204,7 @@ private struct MeetingCard: View {
                 .overlay { RoundedRectangle(cornerRadius: 10).stroke(selected ? JottieStyle.accent.opacity(0.15) : .clear, lineWidth: 1) }
                 .contentShape(RoundedRectangle(cornerRadius: 10))
         }.buttonStyle(.plain).onHover { hovering = $0 }.animation(.easeOut(duration: 0.12), value: hovering)
-            .accessibilityLabel(hit.meeting.displayTitle).accessibilityAddTraits(selected ? .isSelected : [])
+            .accessibilityLabel(hit.meeting.displayTitle).accessibilityValue(processingStatus ?? "").accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 

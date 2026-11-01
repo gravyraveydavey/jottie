@@ -61,6 +61,34 @@ public struct InvitedSpeakerStatus: Identifiable, Sendable {
 }
 
 public extension Meeting {
+    /// Identity inputs that can change a summary, excluding directory refresh timestamps
+    /// and AI attributions produced by the summary itself.
+    var summaryIdentityRevision: String {
+        struct Identity: Encodable {
+            var name: String; var jobTitle: String?; var employeeID: String?
+        }
+        struct Person: Encodable {
+            var invitee: String; var company: String; var employeeID: String
+            var name: String; var jobTitle: String?; var email: String?; var aliases: [String]
+        }
+        struct Inputs: Encodable {
+            var names: [String: String]; var roles: [String: String]; var assignments: [String: Identity]
+            var calendar: CalendarEventContext?; var participants: [String]; var people: [Person]
+        }
+        let manual = (speakerAttributions ?? [:]).filter { $0.value.method == "manual" }
+            .mapValues { Identity(name: $0.name, jobTitle: $0.jobTitle, employeeID: $0.employeeID) }
+        let people = (participantContext ?? []).sorted {
+            ($0.company, $0.employeeID, $0.invitee) < ($1.company, $1.employeeID, $1.invitee)
+        }.map { Person(invitee: $0.invitee, company: $0.company, employeeID: $0.employeeID,
+            name: $0.name, jobTitle: $0.jobTitle, email: $0.workEmail, aliases: ($0.aliases ?? []).sorted()) }
+        let inputs = Inputs(names: speakerNames, roles: speakerRoles ?? [:], assignments: manual,
+            calendar: calendarContext, participants: participants.sorted(), people: people)
+        return Codec.hash((try? Codec.encode(inputs)) ?? Data())
+    }
+    var summaryNeedsIdentityRefresh: Bool {
+        guard analysis != nil || importedSummary != nil, let basis = sourceMetadata?["summaryIdentityRevision"] else { return false }
+        return basis != summaryIdentityRevision
+    }
     func attribution(for segment: Segment) -> SpeakerAttribution? {
         if let value = speakerAttributions?[segment.id], value.method == "manual" { return value.name.isEmpty ? nil : value }
         if let name = speakerNames[segment.speaker], !name.isEmpty {

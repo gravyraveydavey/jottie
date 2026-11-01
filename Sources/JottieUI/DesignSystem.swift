@@ -184,3 +184,18 @@ struct JottieImportIcon: View {
         }.frame(width: 16, height: 16).accessibilityHidden(true)
     }
 }
+
+struct JottieBroomIcon: View {
+    var body: some View {
+        GeometryReader { geometry in
+            Path { path in
+                path.move(to: CGPoint(x: 20, y: 3)); path.addLine(to: CGPoint(x: 11, y: 12))
+                path.move(to: CGPoint(x: 9, y: 10)); path.addLine(to: CGPoint(x: 15, y: 16))
+                path.addLine(to: CGPoint(x: 9, y: 22)); path.addLine(to: CGPoint(x: 2, y: 15)); path.closeSubpath()
+                path.move(to: CGPoint(x: 5, y: 18)); path.addLine(to: CGPoint(x: 9, y: 14))
+                path.move(to: CGPoint(x: 8, y: 21)); path.addLine(to: CGPoint(x: 12, y: 17))
+            }.applying(CGAffineTransform(scaleX: geometry.size.width / 24, y: geometry.size.height / 24))
+                .stroke(style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
+        }.frame(width: 16, height: 16).accessibilityHidden(true)
+    }
+}

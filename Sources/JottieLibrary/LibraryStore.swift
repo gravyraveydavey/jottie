@@ -126,6 +126,13 @@ public actor LibraryStore: MeetingRepository {
     }
     private func commit(_ meeting: Meeting) throws {
         var meeting = meeting
+        if meeting.analysis != nil || meeting.importedSummary != nil,
+           meeting.sourceMetadata?["summaryIdentityRevision"] == nil,
+           let previous = try? self.meeting(meeting.id),
+           previous.analysis?.id == meeting.analysis?.id, previous.importedSummary == meeting.importedSummary {
+            meeting.sourceMetadata = meeting.sourceMetadata ?? [:]
+            meeting.sourceMetadata?["summaryIdentityRevision"] = previous.sourceMetadata?["summaryIdentityRevision"] ?? previous.summaryIdentityRevision
+        }
         if let revision = meeting.analysis, revision.analysis.tags.count > 10 {
             meeting.analysis = AnalysisRevision(transcriptRevision: revision.transcriptRevision, promptRevision: revision.promptRevision,
                 analysis: MeetingTags.applying(to: revision.analysis, existing: []))
@@ -324,6 +331,79 @@ public actor LibraryStore: MeetingRepository {
             try commit(value)
         }
     }
+    /// Saves passage text and user assignments together, against the editor's snapshot.
+    /// IDs, timing and acoustic labels remain stable so existing source links still resolve.
+    public func editTranscript(meetingID: UUID, text: [String: String], assignments: [String: SpeakerAttribution],
+                               expectedRevision: String, expectedSpeakerRevision: String) throws {
+        try locked {
+            let value = try meeting(meetingID)
+            guard value.transcriptRevision == expectedRevision, value.speakerRevision == expectedSpeakerRevision else {
+                throw JottieError.conflict("Transcript or speakers changed while editing. Reopen the editor to use the latest version.")
+            }
+            try commitTranscriptEdits(value, text: text, assignments: assignments)
+        }
+    }
+    public func editTranscriptPassage(meetingID: UUID, segmentID: String, text: String, expectedText: String) throws {
+        try locked {
+            let value = try meeting(meetingID)
+            guard let passage = value.segments.first(where: { $0.id == segmentID }) else {
+                throw JottieError.conflict("This passage is no longer in the transcript.")
+            }
+            if passage.text == text { return }
+            guard passage.text == expectedText else {
+                throw JottieError.conflict("This passage changed elsewhere. Your edit has been kept here for review.")
+            }
+            try commitTranscriptEdits(value, text: [segmentID: text], assignments: [:])
+        }
+    }
+    public func assignTranscriptSpeaker(meetingID: UUID, label: String, assignment: SpeakerAttribution) throws {
+        try locked {
+            let value = try meeting(meetingID)
+            let passages = value.segments.filter { $0.speaker == label }
+            guard !passages.isEmpty else { throw JottieError.conflict("This speaker is no longer in the transcript.") }
+            try commitTranscriptEdits(value, text: [:], assignments: Dictionary(uniqueKeysWithValues: passages.map { ($0.id, assignment) }))
+        }
+    }
+    private func commitTranscriptEdits(_ meeting: Meeting, text: [String: String], assignments: [String: SpeakerAttribution]) throws {
+        var value = meeting
+        let ids = Set(value.segments.map(\.id))
+        guard Set(text.keys).isSubset(of: ids), Set(assignments.keys).isSubset(of: ids),
+              text.values.allSatisfy({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }),
+              assignments.values.allSatisfy({ $0.method == "manual" }) else {
+            throw JottieError.invalid("Use existing passages, non-empty text and manual speaker assignments.")
+        }
+        let updated = value.segments.map { segment in
+            var result = segment
+            if let replacement = text[segment.id] { result.text = replacement }
+            return result
+        }
+        let textChanged = updated != value.segments
+        var speakers = value.speakerAttributions ?? [:]
+        let originalIDs = Set(value.originalTranscript.map(\.id))
+        for (id, assignment) in assignments {
+            let name = assignment.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let role = assignment.jobTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let clean = SpeakerAttribution(name: name, jobTitle: name.isEmpty || role?.isEmpty == true ? nil : role,
+                employeeID: name.isEmpty ? nil : assignment.employeeID, method: "manual")
+            for target in [id] + (value.transcriptSourceSegmentIDs?[id] ?? []) where ids.contains(target) || originalIDs.contains(target) {
+                speakers[target] = clean
+            }
+        }
+        guard textChanged || speakers != (value.speakerAttributions ?? [:]) else { return }
+        if textChanged {
+            if value.cleanupOriginalSegments == nil { value.cleanupOriginalSegments = value.segments }
+            value.segments = updated
+            value.transcriptRevision = Codec.hash(try Codec.encode(updated))
+            value.analysis = nil
+            speakers = speakers.filter { $0.value.method == "manual" }
+            value.sourceMetadata = value.sourceMetadata ?? [:]
+            value.sourceMetadata?["cleanupNeedsSummary"] = "true"
+            value.sourceMetadata?["transcriptManuallyEdited"] = "true"
+        }
+        value.speakerAttributions = speakers.isEmpty ? nil : speakers
+        value.cleanupDraft = nil
+        try commit(value)
+    }
     public func restoreOriginalTranscript(meetingID: UUID, expectedRevision: String) throws {
         try locked {
             var value = try meeting(meetingID)
@@ -332,6 +412,7 @@ public actor LibraryStore: MeetingRepository {
             value.segments = original; value.transcriptRevision = Codec.hash(try Codec.encode(original))
             value.cleanupOriginalSegments = nil; value.transcriptSourceSegmentIDs = nil; value.activeCleanup = nil; value.cleanupDraft = nil; value.analysis = nil
             value.sourceMetadata = value.sourceMetadata ?? [:]; value.sourceMetadata?["cleanupNeedsSummary"] = "true"
+            value.sourceMetadata?["transcriptManuallyEdited"] = nil
             value.speakerAttributions = value.speakerAttributions?.filter { $0.value.method == "manual" }
             try commit(value)
         }
@@ -406,11 +487,14 @@ public actor LibraryStore: MeetingRepository {
             try commit(value)
         }
     }
-    public func apply(_ revision: AnalysisRevision, to id: UUID) throws {
+    public func apply(_ revision: AnalysisRevision, to id: UUID, identityRevision: String? = nil) throws {
         try locked {
             var value = try meeting(id)
             guard value.transcriptRevision == revision.transcriptRevision else { throw JottieError.conflict("Transcript changed during analysis.") }
             try revision.analysis.validate(segments: value.segments)
+            let identityBasis = identityRevision ?? value.summaryIdentityRevision
+            value.sourceMetadata = value.sourceMetadata ?? [:]
+            value.sourceMetadata?["summaryIdentityRevision"] = identityBasis
             value = SpeakerReconciliation.applying(revision, to: value)
             value.analysis = revision
             value.sourceMetadata?["cleanupNeedsSummary"] = nil
@@ -883,6 +967,7 @@ public actor LibraryStore: MeetingRepository {
         guard value.transcriptRevision != revision else { return }
         value.cleanupOriginalSegments = nil; value.transcriptSourceSegmentIDs = nil; value.activeCleanup = nil; value.cleanupDraft = nil
         value.sourceMetadata?["cleanupNeedsSummary"] = nil
+        value.sourceMetadata?["transcriptManuallyEdited"] = nil
         let previous = Dictionary(uniqueKeysWithValues: value.segments.map { ($0.id, $0) })
         let current = Dictionary(uniqueKeysWithValues: segments.map { ($0.id, $0) })
         value.speakerAttributions = value.speakerAttributions?.filter { id, attribution in

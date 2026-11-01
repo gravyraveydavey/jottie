@@ -9,9 +9,7 @@ import JottieLibrary
     @ViewState private var correcting: ReconciledSpeaker?
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
-            JottieSection(title: "Speakers detected", icon: "person.2") {
-                Text("Reconciled from voice labels, conversation evidence, invitation names and directory aliases. AI assignments are likely identities, not verified attendance.")
-                    .font(JottieStyle.font(13)).foregroundStyle(JottieStyle.muted).lineSpacing(6)
+            VStack(alignment: .leading, spacing: 16) {
                 ForEach(meeting.reconciledSpeakers) { row in
                     VStack(alignment: .leading, spacing: 12) {
                         HStack(alignment: .top) {
@@ -35,10 +33,7 @@ import JottieLibrary
                         }
                     }.padding(16).overlay { RoundedRectangle(cornerRadius: 12).stroke(JottieStyle.border, lineWidth: 1) }
                 }
-                if meeting.speakerLabels.contains("them") || meeting.speakerLabels.contains("speaker") {
-                    Text("A shared channel can contain several people. Correct individual passages where needed; old recordings without audio cannot be reliably separated by voice.")
-                        .font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted).lineSpacing(5)
-                }
+
             }
             if !meeting.undetectedInvitees.isEmpty {
                 JottieSection(title: "Invited but not detected", icon: "person.crop.circle.badge.questionmark") {
@@ -64,8 +59,14 @@ import JottieLibrary
                     Button("Find / change calendar event") { choosingCalendar = true }
                     Button("Refresh directory matches") { Task { await model.refreshPeople(for: meeting) } }.disabled(meeting.directoryIdentityCandidates.isEmpty)
                 }.buttonStyle(JottieButtonStyle(kind: .outline, compact: true))
-                Text("Regenerate summary to reconcile with the latest aliases and invitation. Original utterances stay intact; manual assignments take precedence.")
-                    .font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted)
+                if meeting.summaryNeedsIdentityRefresh {
+                    HStack(spacing: 6) {
+                        Text("Speaker or meeting details changed.").foregroundStyle(JottieStyle.muted)
+                        Button("Regenerate summary") { Task { await model.regenerate(meeting) } }
+                            .buttonStyle(.plain).foregroundStyle(JottieStyle.accent)
+                            .disabled(model.working || model.isSummarizing(meeting))
+                    }.font(JottieStyle.font(11))
+                }
             }
         }.task { await model.loadDirectoryPeople() }
             .sheet(isPresented: $choosingCalendar) { MeetingCalendarPicker(model: model, meeting: meeting) }
@@ -73,10 +74,12 @@ import JottieLibrary
     }
 }
 
-@MainActor private struct SpeakerAssignmentEditor: View {
+@MainActor struct SpeakerAssignmentEditor: View {
     @ObservedObject var model: LibraryViewModel
     let meeting: Meeting
     let row: ReconciledSpeaker
+    var initialSegmentID: String? = nil
+    var saveDraft: (([String], SpeakerAttribution) -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @ViewState private var name = ""
     @ViewState private var role = ""
@@ -84,59 +87,107 @@ import JottieLibrary
     @ViewState private var selected = Set<String>()
     @ViewState private var choosePassages = false
     @ViewState private var saving = false
+    @ViewState private var error: String?
+    @ViewState private var selectedName: String?
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             Text("Correct speaker assignment").font(JottieStyle.font(22, .semibold))
-            Text("Apply to this row's passages, or select individual passages. Leave the name blank to mark them unknown. This correction overrides future AI analysis.")
-                .font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted).fixedSize(horizontal: false, vertical: true)
-            TextField("Full name", text: $name).textFieldStyle(JottieInputStyle()).onChange(of: name) { _, value in
-                if model.directoryPeople.first(where: { $0.id == employeeID })?.name != value { employeeID = nil }
-            }
-            if !name.isEmpty {
-                ForEach(Array(model.directoryPeople.filter { person in NameAliases.all(name: person.name, aliases: person.aliases).contains { NameAliases.normalise($0).contains(NameAliases.normalise(name)) } }.prefix(5))) { person in
-                    Button(person.name + (person.jobTitle.map { " · " + $0 } ?? "")) { name = person.name; role = person.jobTitle ?? ""; employeeID = person.id }
-                        .buttonStyle(.plain).foregroundStyle(JottieStyle.accent)
-                }
-            }
-            TextField("Job title", text: $role).textFieldStyle(JottieInputStyle())
-            Toggle("Choose individual passages (\(selected.count) selected)", isOn: $choosePassages).toggleStyle(.checkbox)
-            if choosePassages {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 14) {
-                        ForEach(meeting.segments.filter { row.segmentIDs.contains($0.id) }) { segment in
-                            Toggle(isOn: Binding(get: { selected.contains(segment.id) }, set: { if $0 { selected.insert(segment.id) } else { selected.remove(segment.id) } })) {
-                                Text("\(segment.startMS / 60000):\(String(format: "%02d", segment.startMS / 1000 % 60)) · \(segment.text)")
-                                    .font(JottieStyle.font(12)).lineLimit(3)
-                            }.toggleStyle(.checkbox)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Apply to this row's passages, or select individual passages. Leave the name blank to mark them unknown. This correction overrides future AI analysis.")
+                        .font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted).fixedSize(horizontal: false, vertical: true)
+                    TextField("Type a name, alias or email to search BambooHR", text: $name).textFieldStyle(JottieInputStyle())
+                        .accessibilityLabel("Speaker name and BambooHR search")
+                        .onChange(of: name) { _, value in
+                            if let selectedName, selectedName != value { employeeID = nil; self.selectedName = nil; role = "" }
                         }
+                    speakerChoices
+                    TextField("Job title", text: $role).textFieldStyle(JottieInputStyle())
+                    Toggle("Choose individual passages (\(selected.count) selected)", isOn: $choosePassages).toggleStyle(.checkbox)
+                    if choosePassages {
+                        ScrollView {
+                            LazyVStack(alignment: .leading, spacing: 14) {
+                                ForEach(meeting.segments.filter { row.segmentIDs.contains($0.id) }) { segment in
+                                    Toggle(isOn: Binding(get: { selected.contains(segment.id) }, set: { if $0 { selected.insert(segment.id) } else { selected.remove(segment.id) } })) {
+                                        Text("\(segment.startMS / 60000):\(String(format: "%02d", segment.startMS / 1000 % 60)) · \(segment.text)")
+                                            .font(JottieStyle.font(12)).lineLimit(3)
+                                    }.toggleStyle(.checkbox)
+                                }
+                            }
+                        }.frame(height: min(280, max(100, CGFloat(row.segmentIDs.count) * 72)))
                     }
-                }.frame(height: min(280, max(100, CGFloat(row.segmentIDs.count) * 72)))
-            }
-            let suggestions = meeting.analysis?.analysis.speakerCandidates?.filter { $0.label == row.label } ?? []
-            if !suggestions.isEmpty {
-                DisclosureGroup("AI suggestions") {
-                    ForEach(Array(suggestions.enumerated()), id: \.offset) { _, candidate in
-                        Text(candidate.name + " · " + candidate.evidence.map(\.quote).joined(separator: " / "))
-                            .font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted)
+                    let suggestions = meeting.analysis?.analysis.speakerCandidates?.filter { $0.label == row.label } ?? []
+                    if !suggestions.isEmpty {
+                        DisclosureGroup("AI suggestions") {
+                            ForEach(Array(suggestions.enumerated()), id: \.offset) { _, candidate in
+                                Text(candidate.name + " · " + candidate.evidence.map(\.quote).joined(separator: " / "))
+                                    .font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted)
+                            }
+                        }
                     }
                 }
             }
             HStack {
-                Button("Cancel") { dismiss() }
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
                 Spacer()
                 Button("Save assignment") {
                     saving = true
                     Task {
                         do {
-                            let matches = model.directoryPeople.filter { NameAliases.normalise($0.name) == NameAliases.normalise(name) }
-                            try await model.store.setSpeakerAssignment(segmentIDs: choosePassages ? Array(selected) : row.segmentIDs,
-                                name: name, role: role, employeeID: employeeID ?? (matches.count == 1 ? matches[0].id : nil), meetingID: meeting.id, expectedRevision: meeting.transcriptRevision)
+                            let targets = choosePassages ? Array(selected) : row.segmentIDs
+                            if let saveDraft {
+                                saveDraft(targets, SpeakerAttribution(name: name, jobTitle: role, employeeID: employeeID, method: "manual"))
+                                dismiss(); return
+                            }
+                            try await model.store.editTranscript(meetingID: meeting.id, text: [:],
+                                assignments: Dictionary(uniqueKeysWithValues: targets.map { ($0, SpeakerAttribution(name: name, jobTitle: role, employeeID: employeeID, method: "manual")) }),
+                                expectedRevision: meeting.transcriptRevision, expectedSpeakerRevision: meeting.speakerRevision)
                             await model.reload(); dismiss()
-                        } catch { model.message = error.localizedDescription; saving = false }
+                        } catch { self.error = error.localizedDescription; saving = false }
                     }
                 }.buttonStyle(JottieButtonStyle(kind: .primary)).disabled(saving || (choosePassages && selected.isEmpty))
             }
-        }.padding(28).frame(width: 610)
-            .onAppear { name = row.name.hasPrefix("Speaker ") ? "" : row.name; role = row.jobTitle ?? ""; employeeID = row.employeeID; selected = Set(row.segmentIDs) }
+            if let error { Text(error).font(JottieStyle.font(12)).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
+        }.padding(28).frame(width: 610, height: 700)
+            .onAppear {
+                name = row.id.hasPrefix("voice:") ? "" : row.name
+                role = row.jobTitle ?? ""; employeeID = row.employeeID; selectedName = name
+                selected = initialSegmentID.map { Set([$0]) } ?? Set(row.segmentIDs); choosePassages = initialSegmentID != nil
+            }
+            .task { await model.loadDirectoryPeople() }
+            .disabled(saving)
+    }
+
+    private var speakerChoices: some View {
+        let invited = SpeakerChoice.calendarCandidates(for: meeting, people: model.directoryPeople)
+        let matches = SpeakerChoice.directoryMatches(name, people: model.directoryPeople)
+        return ScrollView {
+            LazyVStack(alignment: .leading, spacing: 10) {
+                if !invited.isEmpty {
+                    Text("From this meeting's calendar invitation").font(JottieStyle.font(11, .semibold)).foregroundStyle(JottieStyle.muted)
+                    ForEach(invited) { choice in choiceButton(choice) }
+                }
+                if !NameAliases.normalise(name).isEmpty {
+                    Text("BambooHR directory · \(matches.count) matches").font(JottieStyle.font(11, .semibold)).foregroundStyle(JottieStyle.muted)
+                    ForEach(matches) { choice in choiceButton(choice) }
+                    if matches.isEmpty { Text("No directory matches. You can save the name you entered.").font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted) }
+                } else {
+                    Text(model.directoryPeople.isEmpty ? "Sync BambooHR in Settings → Integrations for directory suggestions, or enter a name." : "Type to search all \(model.directoryPeople.count) people in the synced BambooHR directory, or enter a name.")
+                        .font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted)
+                }
+            }.frame(maxWidth: .infinity, alignment: .leading)
+        }.frame(height: 180)
+    }
+
+    private func choiceButton(_ choice: SpeakerChoice) -> some View {
+        Button {
+            name = choice.name; selectedName = choice.name; role = choice.jobTitle ?? ""; employeeID = choice.employeeID
+        } label: {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(choice.name).font(JottieStyle.font(13, .medium))
+                Text([choice.jobTitle, choice.email].compactMap { $0 }.joined(separator: " · "))
+                    .font(JottieStyle.font(11)).foregroundStyle(JottieStyle.muted)
+            }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+        }.buttonStyle(.plain).foregroundStyle(JottieStyle.accent)
     }
 }

@@ -91,6 +91,8 @@ public struct CaptureQueueItem: Identifiable, Equatable, Sendable {
     @Published public var calendars: [CalendarChoice] = []
     @Published public var message: String?
     @Published public var working = false
+    @Published public private(set) var updatingAllSummaries = false
+    @Published public private(set) var summaryProcessingID: UUID?
     @Published public var hasMore = false
     @Published public var accountID = ""
     @Published public var codexStatus: CodexInstallation.Status?
@@ -101,7 +103,9 @@ public struct CaptureQueueItem: Identifiable, Equatable, Sendable {
     @Published public var cleanupProcessingID: UUID?
     @Published public var cleanupReviewMeeting: Meeting?
     @Published public var cleanupProgress = "Preparing transcript…"
+    @Published var transcriptEditDrafts: [String: TranscriptPassageDraft] = [:]
     private var cleanupTask: Task<Void, Never>?
+    private let cleanupRunner: (any StructuredRunner)?
     public func startTranscriptCleanup(_ meeting: Meeting, preferences: TranscriptCleanupPreferences? = nil) {
         guard cleanupTask == nil else { return }
         cleanupProcessingID = meeting.id
@@ -113,7 +117,7 @@ public struct CaptureQueueItem: Identifiable, Equatable, Sendable {
                 if let preferences {
                     try await self.store.setCleanupPreferences(preferences, meetingID: meeting.id, expectedRevision: meeting.transcriptRevision)
                 }
-                try await self.coordinator.prepareTranscriptCleanup(meeting.id, progress: { [weak self] done, total in
+                try await self.coordinator.prepareTranscriptCleanup(meeting.id, runner: self.cleanupRunner, progress: { [weak self] done, total in
                     await MainActor.run { self?.cleanupProgress = done == total ? "Preparing review…" : "Cleaning section \(done + 1) of \(total)…" }
                     await self?.refreshWorkStatus()
                 })
@@ -131,6 +135,31 @@ public struct CaptureQueueItem: Identifiable, Equatable, Sendable {
     public func isCleaning(_ meeting: Meeting) -> Bool { cleanupProcessingID == meeting.id || cleanupJob(for: meeting) != nil }
     public func cleanupStatus(for meeting: Meeting) -> String {
         cleanupJob(for: meeting)?.sectionProgress ?? (cleanupProcessingID == meeting.id ? cleanupProgress : "Preparing cleanup preview…")
+    }
+    public func summaryJob(for meeting: Meeting) -> WorkStatus? {
+        jobs.first { $0.id == "analysis:\(meeting.id):\(meeting.transcriptRevision):\(savedSettings.analysisRevision)" }
+    }
+    public func isSummarizing(_ meeting: Meeting) -> Bool {
+        summaryProcessingID == meeting.id || summaryJob(for: meeting)?.state == "running"
+    }
+    public func processingStatus(for meeting: Meeting) -> String? {
+        if isSummarizing(meeting) { return "Updating summary…" }
+        if isCleaning(meeting) { return "Cleaning transcript…" }
+        return nil
+    }
+    public func summaryStatus(for meeting: Meeting) -> String {
+        if isSummarizing(meeting) {
+            return meeting.analysis != nil || meeting.importedSummary != nil
+                ? "Updating summary · previous summary remains available" : "Generating summary…"
+        }
+        if let job = summaryJob(for: meeting) {
+            if job.state == "pending" { return "Summary update queued" }
+            if ["deferred", "held"].contains(job.state) { return "Summary update failed · see Queue for details" }
+        }
+        guard let revision = meeting.analysis else { return "No generated summary yet" }
+        if meeting.summaryNeedsIdentityRefresh { return "Speaker or meeting details changed · update available" }
+        let basis = meeting.sourceMetadata?["transcriptManuallyEdited"] == "true" ? "Edited transcript" : meeting.cleanupOriginalSegments == nil ? "Original transcript" : "Cleaned transcript"
+        return revision.promptRevision == savedSettings.analysisRevision ? "Summary up to date · \(basis)" : "Earlier prompt · update available"
     }
     private func refreshWorkStatus() async {
         do {
@@ -165,8 +194,10 @@ public struct CaptureQueueItem: Identifiable, Equatable, Sendable {
     public var onLive: ((Bool) -> Void)?
     public var onImportMedia: (([URL]) -> Void)?
     public var onRetryTranscription: (() -> Void)?
-    public init(store: LibraryStore, coordinator: KnowledgeCoordinator, account: MicrosoftAccount, publisher: GraphPublisher) {
+    public init(store: LibraryStore, coordinator: KnowledgeCoordinator, account: MicrosoftAccount, publisher: GraphPublisher,
+                cleanupRunner: (any StructuredRunner)? = nil) {
         self.store = store; self.coordinator = coordinator; self.account = account; self.publisher = publisher
+        self.cleanupRunner = cleanupRunner
         persistPresentation = store.root.standardizedFileURL == LibraryStore.defaultRoot.standardizedFileURL
     }
     public var selectedFolder: Folder? { folders.first { $0.id.uuidString == location } }
@@ -220,17 +251,25 @@ public struct CaptureQueueItem: Identifiable, Equatable, Sendable {
     public func updateSummaries() async {
         guard !working else { return }
         guard savedSettings.analysisEnabled else { message = "Enable Codex analysis in Settings first."; return }
-        working = true; defer { working = false }
+        working = true; updatingAllSummaries = true
+        defer { working = false; updatingAllSummaries = false }
         do {
-            for meeting in outdatedMeetings where meeting.analysis != nil || meeting.sourceMetadata?["cleanupNeedsSummary"] == "true" { try await coordinator.regenerate(meeting.id) }
+            for meeting in outdatedMeetings where meeting.analysis != nil || meeting.sourceMetadata?["cleanupNeedsSummary"] == "true" {
+                summaryProcessingID = meeting.id
+                try await coordinator.regenerate(meeting.id, statusChanged: { [weak self] in await self?.reload() })
+                summaryProcessingID = nil
+                await reload()
+            }
             await coordinator.run(updateNow: true); await reload()
-        } catch { message = error.localizedDescription }
+        } catch { message = error.localizedDescription; await reload() }
+        summaryProcessingID = nil
     }
     public func regenerate(_ meeting: Meeting) async {
         guard !working else { return }
-        working = true; defer { working = false }
-        do { try await coordinator.regenerate(meeting.id); await reload() }
-        catch { message = error.localizedDescription }
+        working = true; summaryProcessingID = meeting.id
+        defer { working = false; summaryProcessingID = nil }
+        do { try await coordinator.regenerate(meeting.id, statusChanged: { [weak self] in await self?.reload() }); await reload() }
+        catch { message = error.localizedDescription; await reload() }
     }
     public var tags: [String] { Array(Set(meetings.flatMap { $0.analysis?.analysis.tags ?? [] })).sorted() }
     public var flatFolders: [(folder: Folder, depth: Int)] {
@@ -399,9 +438,16 @@ public struct CaptureQueueItem: Identifiable, Equatable, Sendable {
         await coordinator.run(updateNow: true); await reload()
     }
     public func regenerate() async {
+        guard !working else { return }
         working = true; defer { working = false }
-        do { for id in selection { try await coordinator.regenerate(id) }; await reload() }
-        catch { message = error.localizedDescription }
+        defer { summaryProcessingID = nil }
+        do {
+            for id in selection {
+                summaryProcessingID = id
+                try await coordinator.regenerate(id, statusChanged: { [weak self] in await self?.reload() })
+            }
+            await reload()
+        } catch { message = error.localizedDescription; await reload() }
     }
     public func retry(_ job: WorkStatus) async {
         if job.isTranscriptCleanup {
@@ -433,7 +479,7 @@ public struct CaptureQueueItem: Identifiable, Equatable, Sendable {
         do { let count = try await store.purgeTrash(emptyAll: true); await reload(); message = "Deleted \(count) meetings from Trash." }
         catch { message = error.localizedDescription }
     }
-    public func refreshPeople(for meeting: Meeting) async {
+    public func refreshPeople(for meeting: Meeting, showMessage: Bool = true) async {
         do {
             let current = try await store.meeting(meeting.id)
             let saved = try await store.settings()
@@ -443,15 +489,15 @@ public struct CaptureQueueItem: Identifiable, Equatable, Sendable {
             let matches = try await directory.matching(current.directoryIdentityCandidates, company: company)
             _ = try await store.setParticipantContext(matches, meetingID: current.id)
             await reload()
-            message = "Matched \(matches.count) of \(current.directoryIdentityCandidates.count) invitation/transcript identities against the local directory. Summary revisions are unchanged."
+            if showMessage { message = "Matched \(matches.count) of \(current.directoryIdentityCandidates.count) invitation/transcript identities against the local directory." }
         } catch { message = error.localizedDescription }
     }
     public func attachCalendar(_ event: CalendarEventContext, to meeting: Meeting) async {
         do {
             try await store.setCalendarContext(event, meetingID: meeting.id)
             await reload()
-            if savedSettings.bambooEnabled { await refreshPeople(for: meeting) }
-            else { message = "Calendar context attached. Regenerate explicitly to update the summary." }
+            message = nil
+            if savedSettings.bambooEnabled { await refreshPeople(for: meeting, showMessage: false) }
         } catch { message = error.localizedDescription }
     }
     public func loadDirectoryPeople() async {

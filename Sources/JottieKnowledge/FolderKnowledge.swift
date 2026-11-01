@@ -137,9 +137,14 @@ public actor KnowledgeCoordinator {
             let contextService = contexts ?? CodexFolderContext(runner: runner, prompt: settings.folderContextPrompt, configurationRevision: settings.contextRevision)
             let folders = try await store.folders()
             let allAtStart = try await store.meetings()
-            let waiting = allAtStart.filter { $0.analysis == nil && $0.sourceMetadata?["cleanupNeedsSummary"] != "true" }
+            let requested = Set(try await ledger.statuses().map(\.id))
+            let currentAnalysisJobs = Set(allAtStart.map { "analysis:\($0.id):\($0.transcriptRevision):\(settings.analysisRevision)" })
+            let waiting = allAtStart.filter {
+                ($0.analysis == nil && $0.sourceMetadata?["cleanupNeedsSummary"] != "true")
+                    || requested.contains("analysis:\($0.id):\($0.transcriptRevision):\(settings.analysisRevision)")
+            }
             progressIDs = Set(waiting.map { "analysis:\($0.id):\($0.transcriptRevision):\(settings.analysisRevision)" })
-            try await ledger.supersede(prefix: "analysis:", keeping: progressIDs)
+            try await ledger.supersede(prefix: "analysis:", keeping: currentAnalysisJobs)
             let checkContexts = updateNow || Date().timeIntervalSince(lastContextCheck) >= Double(settings.refreshMinutes * 60)
             if checkContexts {
                 for folder in folders {
@@ -236,20 +241,38 @@ public actor KnowledgeCoordinator {
             throw error
         }
     }
-    public func regenerate(_ id: UUID) async throws {
+    public func regenerate(_ id: UUID, statusChanged: @escaping @Sendable () async -> Void = {}) async throws {
         guard !busy else { throw JottieError.unavailable("Processing is running. Retry after it finishes.") }
         busy = true
         defer { busy = false }
         let settings = try await store.settings()
         guard settings.analysisEnabled else { throw JottieError.invalid("Enable Codex analysis in Library Settings.") }
-        let value = try await enrichedMeeting(id, settings: settings)
-        let runner = CodexRunner(executable: settings.codexPath, model: settings.codexModel, effort: settings.codexEffort)
-        let folders = try await store.folders()
-        let tags = Self.existingTags(try await store.meetings())
-        let selectedAnalyzer = analyzer ?? CodexAnalyzer(runner: runner, existingTags: tags)
-        let output = try await selectedAnalyzer.analyze(value, prompt: settings.summaryPrompt, folders: folders)
-        let revision = AnalysisRevision(transcriptRevision: value.transcriptRevision, promptRevision: settings.analysisRevision, analysis: output)
-        try await store.apply(revision, to: id)
+        let value = try await store.meeting(id)
+        let key = "analysis:\(id):\(value.transcriptRevision):\(settings.analysisRevision)"
+        try await ledger.supersede(prefix: "analysis:\(id):", keeping: [key])
+        // An explicit click can retry deferred work or replace a completed revision.
+        try await ledger.retry(key)
+        guard try await ledger.begin(key, stage: "Meeting analysis", allowCompleted: true) else {
+            throw JottieError.unavailable("A summary update is already running for this meeting.")
+        }
+        progressIDs = [key]
+        await statusChanged()
+        do {
+            let prepared = try await enrichedMeeting(id, settings: settings)
+            let runner = CodexRunner(executable: settings.codexPath, model: settings.codexModel, effort: settings.codexEffort)
+            let folders = try await store.folders()
+            let tags = Self.existingTags(try await store.meetings())
+            let selectedAnalyzer = analyzer ?? CodexAnalyzer(runner: runner, existingTags: tags)
+            let output = try await selectedAnalyzer.analyze(prepared, prompt: settings.summaryPrompt, folders: folders)
+            let revision = AnalysisRevision(transcriptRevision: prepared.transcriptRevision, promptRevision: settings.analysisRevision, analysis: output)
+            try await store.apply(revision, to: id, identityRevision: prepared.summaryIdentityRevision)
+            try await ledger.finish(key)
+        } catch {
+            try? await ledger.fail(key, message: Self.message(error))
+            await statusChanged()
+            throw error
+        }
+        await statusChanged()
     }
     private func enrichedMeeting(_ id: UUID, settings: LibrarySettings) async throws -> Meeting {
         var value = try await store.meeting(id)
@@ -273,7 +296,7 @@ public actor KnowledgeCoordinator {
             let prepared = try await enrichedMeeting(meeting.id, settings: settings)
             let analysis = try await analyzer.analyze(prepared, prompt: settings.summaryPrompt, folders: folders)
             try await store.apply(AnalysisRevision(transcriptRevision: meeting.transcriptRevision,
-                promptRevision: settings.analysisRevision, analysis: analysis), to: meeting.id)
+                promptRevision: settings.analysisRevision, analysis: analysis), to: meeting.id, identityRevision: prepared.summaryIdentityRevision)
             try await ledger.finish(key)
         } catch { try? await ledger.fail(key, message: Self.message(error)) }
     }

@@ -6,52 +6,89 @@ import JottieLibrary
     @ObservedObject var model: LibraryViewModel
     let meeting: Meeting
     @Binding var showOriginal: Bool
+    var beforeOpen: () -> Void = {}
     let openSuggestions: () -> Void
     @ViewState private var editingContext = false
     @ViewState private var historyPresentation: CleanupHistoryPresentation?
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(meeting.recordingContext?.playbackDescription ?? "Recording context unavailable").font(JottieStyle.font(12, .medium))
-            if !meeting.cleanupRecommendation.isEmpty {
-                Label(meeting.cleanupRecommendation, systemImage: "waveform.path").font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted)
-            }
-            Text("Cleanup sends transcript text, invitees, matched directory details and recording context to Codex using your ChatGPT sign-in. You review changes before applying them.")
-                .font(JottieStyle.font(11)).foregroundStyle(JottieStyle.muted).fixedSize(horizontal: false, vertical: true)
-            HStack {
-                if model.isCleaning(meeting) {
-                    ProgressView().controlSize(.small)
-                    Text(model.cleanupStatus(for: meeting)).font(JottieStyle.font(12))
-                    if model.cleanupProcessingID == meeting.id {
-                        Button("Cancel") { model.cancelTranscriptCleanup() }.buttonStyle(JottieButtonStyle(kind: .outline, compact: true))
-                    }
-                } else {
-                    Button(action: openSuggestions) { Label(meeting.cleanupDraft == nil ? "Clean up transcript" : "Review cleanup", systemImage: "wand.and.stars") }
-                        .buttonStyle(JottieButtonStyle(kind: .outline, compact: true))
-                        .disabled(model.working || model.cleanupProcessingID != nil)
+        HStack(spacing: 10) {
+            if model.isCleaning(meeting) {
+                ProgressView().controlSize(.small)
+                Text(model.cleanupStatus(for: meeting)).font(JottieStyle.font(11))
+                if model.cleanupProcessingID == meeting.id {
+                    Button("Cancel") { model.cancelTranscriptCleanup() }.buttonStyle(JottieButtonStyle(kind: .outline, compact: true))
                 }
-                Button("Recording context…") { editingContext = true }.buttonStyle(JottieButtonStyle(kind: .outline, compact: true))
-                Menu {
-                    if meeting.cleanupOriginalSegments != nil {
-                        Button(showOriginal ? "Show cleaned transcript" : "Show original transcript") { showOriginal.toggle() }
-                        Button("Restore original transcript") { Task { await model.restoreOriginalTranscript(meeting) } }
-                    }
-                    Button("Cleanup history…") {
-                        Task {
-                            do { historyPresentation = CleanupHistoryPresentation(revisions: try await model.store.cleanupHistory(meetingID: meeting.id)) }
-                            catch { model.message = error.localizedDescription }
-                        }
-                    }
-                } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).fixedSize()
+            } else {
+                CleanupOptionsButton(model: model, meeting: meeting, beforeOpen: beforeOpen)
             }
-            if let revision = meeting.activeCleanup {
-                Text(showOriginal ? "Original transcript · retained for comparison" : "Reviewed cleanup · \(revision.createdAt.formatted(date: .abbreviated, time: .shortened))")
-                    .font(JottieStyle.font(11)).foregroundStyle(JottieStyle.muted)
-            }
+            Menu {
+                if meeting.cleanupDraft != nil { Button("Review cleanup") { beforeOpen(); openSuggestions() } }
+                Button("Recording context…") { beforeOpen(); editingContext = true }
+                if meeting.cleanupOriginalSegments != nil {
+                    Button(showOriginal ? "Show current transcript" : "Show original transcript") { beforeOpen(); showOriginal.toggle() }
+                    Button("Restore original transcript") { beforeOpen(); Task { await model.restoreOriginalTranscript(meeting) } }
+                }
+                Button("Cleanup history…") {
+                    beforeOpen()
+                    Task {
+                        do { historyPresentation = CleanupHistoryPresentation(revisions: try await model.store.cleanupHistory(meetingID: meeting.id)) }
+                        catch { model.message = error.localizedDescription }
+                    }
+                }
+            } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).fixedSize().help("Transcript options")
         }
-        .padding(14).frame(maxWidth: .infinity, alignment: .leading)
-        .background(JottieStyle.selection.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
         .sheet(isPresented: $editingContext) { RecordingContextEditor(model: model, meeting: meeting) }
         .sheet(item: $historyPresentation) { history in CleanupHistorySheet(meeting: meeting, revisions: history.revisions) }
+    }
+}
+
+@MainActor private struct CleanupOptionsButton: View {
+    @ObservedObject var model: LibraryViewModel
+    let meeting: Meeting
+    var beforeOpen: () -> Void = {}
+    @ViewState private var showing = false
+    var body: some View {
+        Button { beforeOpen(); showing = true } label: { Label { Text("Clean up transcript") } icon: { JottieBroomIcon() } }
+            .buttonStyle(JottieButtonStyle(kind: .outline, compact: true))
+            .disabled(meeting.segments.isEmpty || model.working || model.cleanupProcessingID != nil || model.isCleaning(meeting))
+            .popover(isPresented: $showing, attachmentAnchor: .rect(.bounds), arrowEdge: .bottom) {
+                CleanupOptionsPopover(model: model, meeting: meeting) { showing = false }
+            }
+    }
+}
+
+@MainActor private struct CleanupOptionsPopover: View {
+    @ObservedObject var model: LibraryViewModel
+    let meeting: Meeting
+    let didStart: () -> Void
+    @ViewState private var preferences = TranscriptCleanupPreferences()
+    @ViewState private var expectedCount = ""
+    private var validCount: Bool { expectedCount.isEmpty || Int(expectedCount).map { (1...50).contains($0) } == true }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Toggle("Join up fragments", isOn: $preferences.joinFragments).toggleStyle(.checkbox)
+            Toggle("Strip hesitations and fillers (um, uhh)", isOn: $preferences.stripFillers).toggleStyle(.checkbox)
+            HStack {
+                Text("Confirm number of speakers")
+                Spacer()
+                TextField("Optional", text: $expectedCount).textFieldStyle(JottieInputStyle()).frame(width: 76)
+                    .accessibilityLabel("Confirm number of speakers")
+            }
+            TextField("Additional instructions", text: $preferences.instructions, axis: .vertical)
+                .textFieldStyle(JottieInputStyle()).lineLimit(3...5)
+            HStack {
+                Spacer()
+                Button("Clean up") {
+                    var selected = preferences; selected.expectedSpeakerCount = Int(expectedCount)
+                    model.startTranscriptCleanup(meeting, preferences: selected); didStart()
+                }.buttonStyle(JottieButtonStyle(kind: .primary, compact: true))
+                    .disabled(!validCount || preferences.instructions.count > 4000 || model.isCleaning(meeting) || model.working)
+            }
+        }.font(JottieStyle.font(12)).padding(18).frame(width: 360)
+            .onAppear {
+                preferences = meeting.cleanupPreferences ?? TranscriptCleanupPreferences()
+                expectedCount = preferences.expectedSpeakerCount.map(String.init) ?? ""
+            }
     }
 }
 
@@ -113,40 +150,16 @@ import JottieLibrary
     @Binding var selectedChanges: Set<String>
     @Binding var selectedSpeakers: Set<String>
     let didOverwrite: () -> Void
-    @ViewState private var preferences = TranscriptCleanupPreferences()
-    @ViewState private var expectedCount = ""
-    @ViewState private var optionsExpanded = true
     @ViewState private var changesExpanded = false
     @ViewState private var speakersExpanded = false
     @ViewState private var error: String?
     @ViewState private var applying = false
-    private var savedPreferences: TranscriptCleanupPreferences { meeting.cleanupPreferences ?? TranscriptCleanupPreferences() }
-    private var currentPreferences: TranscriptCleanupPreferences {
-        var value = preferences; value.expectedSpeakerCount = Int(expectedCount); return value
-    }
-    private var validCount: Bool { expectedCount.isEmpty || Int(expectedCount).map { (1...50).contains($0) } == true }
     private var stale: Bool {
         guard let draft = meeting.cleanupDraft else { return false }
         return draft.baseRevision != meeting.transcriptRevision || draft.contextRevision != meeting.cleanupContextRevision || draft.promptRevision != model.cleanupPromptRevision
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
-            DisclosureGroup("Cleanup options", isExpanded: $optionsExpanded) {
-                VStack(alignment: .leading, spacing: 12) {
-                    Toggle("Join nearby fragments from the same confirmed speaker", isOn: $preferences.joinFragments)
-                    Toggle("Remove um, uh, erm and other hesitation fillers", isOn: $preferences.stripFillers)
-                    Text("Joined sentences keep the timestamp of their first fragment. The original remains recoverable.").foregroundStyle(JottieStyle.muted)
-                    HStack {
-                        Text("Confirmed number of speakers (optional)")
-                        TextField("e.g. 2", text: $expectedCount).frame(width: 70)
-                    }
-                    TextField("Additional cleanup instructions", text: $preferences.instructions, axis: .vertical).lineLimit(3...6)
-                    Text("Your manual speaker assignments take precedence. A confirmed count constrains the result; it does not identify unnamed people.")
-                        .foregroundStyle(JottieStyle.muted)
-                    Text("This sends transcript text, matched invitation/directory information and recording context to Codex using your ChatGPT sign-in. You review the result before overwriting.")
-                        .foregroundStyle(JottieStyle.muted)
-                }.font(JottieStyle.font(12)).padding(.top, 12)
-            }.font(JottieStyle.font(14, .medium)).disabled(model.isCleaning(meeting))
             HStack(spacing: 12) {
                 if model.isCleaning(meeting) {
                     ProgressView().controlSize(.small)
@@ -155,10 +168,7 @@ import JottieLibrary
                         Button("Cancel") { model.cancelTranscriptCleanup() }.buttonStyle(JottieButtonStyle(kind: .outline, compact: true))
                     }
                 } else {
-                    Button(meeting.cleanupDraft == nil ? "Generate cleanup suggestions" : "Generate fresh suggestions") {
-                        error = nil; model.startTranscriptCleanup(meeting, preferences: currentPreferences)
-                    }.buttonStyle(JottieButtonStyle(kind: .outline, compact: true))
-                        .disabled(!validCount || preferences.instructions.count > 4000 || model.working || model.cleanupProcessingID != nil)
+                    CleanupOptionsButton(model: model, meeting: meeting)
                 }
                 Spacer()
                 if meeting.cleanupDraft != nil {
@@ -170,24 +180,24 @@ import JottieLibrary
                             catch { self.error = error.localizedDescription }
                         }
                     }.buttonStyle(JottieButtonStyle(kind: .primary, compact: true))
-                        .disabled(applying || stale || currentPreferences != savedPreferences || (selectedChanges.isEmpty && selectedSpeakers.isEmpty) || model.cleanupProcessingID != nil || model.isCleaning(meeting))
+                        .disabled(applying || stale || (selectedChanges.isEmpty && selectedSpeakers.isEmpty) || model.cleanupProcessingID != nil || model.isCleaning(meeting))
                 }
             }
             if let error { Text(error).foregroundStyle(.red).font(JottieStyle.font(12)) }
-            if stale || (meeting.cleanupDraft != nil && currentPreferences != savedPreferences) {
+            if stale {
                 Text("The transcript, speakers or cleanup options have changed. Generate fresh suggestions before overwriting.")
                     .font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted)
             }
             if let draft = meeting.cleanupDraft {
                 review(draft)
             } else {
-                Text("Generate a readable transcript preview here. The saved transcript stays unchanged until you choose Overwrite transcript.")
+                Text("No cleanup suggestions yet.")
                     .font(JottieStyle.font(14)).foregroundStyle(JottieStyle.muted)
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
-        .onAppear { loadPreferences(); loadSelection() }
-        .onChange(of: meeting.id) { _, _ in loadPreferences(); loadSelection() }
-        .onChange(of: meeting.cleanupDraft?.id) { _, _ in loadPreferences(); loadSelection() }
+        .onAppear { loadSelection() }
+        .onChange(of: meeting.id) { _, _ in loadSelection() }
+        .onChange(of: meeting.cleanupDraft?.id) { _, _ in loadSelection() }
     }
     @ViewBuilder private func review(_ draft: TranscriptCleanupRevision) -> some View {
         DisclosureGroup("Review \(draft.result.changes.count) individual changes", isExpanded: $changesExpanded) {
@@ -236,9 +246,7 @@ import JottieLibrary
                 .font(JottieStyle.font(13)).foregroundStyle(.red)
         }
     }
-    private func loadPreferences() { preferences = savedPreferences; expectedCount = savedPreferences.expectedSpeakerCount.map(String.init) ?? "" }
     private func loadSelection() {
-        optionsExpanded = meeting.cleanupDraft == nil
         selectedChanges = Set(meeting.cleanupDraft?.result.changes.filter { !$0.uncertain }.map(\.id) ?? []); selectedSpeakers = []
     }
     private func selection(_ id: String, in values: Binding<Set<String>>) -> Binding<Bool> {

@@ -13,6 +13,7 @@ import JottieLibrary
     @ViewState private var transcriptTab = "Original transcript"
     @ViewState private var cleanupSelection = Set<String>()
     @ViewState private var cleanupSpeakers = Set<String>()
+    @ViewState private var activeTranscriptPassage: String?
     private var folderName: String { model.folders.first { $0.id == meeting.folderID }?.name ?? "Import" }
     var body: some View {
         VStack(spacing: 0) {
@@ -30,6 +31,7 @@ import JottieLibrary
                 Menu {
                     Button("Export Markdown…") { model.export() }
                     Button("Regenerate analysis") { Task { await model.regenerate(meeting) } }
+                        .disabled(model.working || model.isSummarizing(meeting))
                     Button("Move to Trash", role: .destructive) { model.trashSelection() }
                 } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).fixedSize().help("Export, regenerate or move to Trash")
             }.font(JottieStyle.font(12)).padding(.horizontal, 20).frame(height: 48)
@@ -41,7 +43,7 @@ import JottieLibrary
                         VStack(alignment: .leading, spacing: 0) {
                             HStack(spacing: 14) {
                                 ForEach([("Summary", "sparkles"), ("Transcript", "doc.text"), ("Speakers", "person.2")], id: \.0) { name, icon in
-                                    DocumentTab(title: name, icon: icon, selected: tab == name, processing: name == "Transcript" && model.isCleaning(meeting)) { tab = name; copied = false }
+                                    DocumentTab(title: name, icon: icon, selected: tab == name, processing: name == "Summary" ? model.isSummarizing(meeting) : name == "Transcript" && model.isCleaning(meeting)) { activeTranscriptPassage = nil; tab = name; copied = false }
                                 }
                                 Spacer(minLength: 0)
                             }
@@ -49,18 +51,24 @@ import JottieLibrary
                         }
                         if tab == "Summary" { summary }
                         else if tab == "Transcript" {
-                            HStack(spacing: 18) {
-                                ForEach(["Original transcript", "Cleanup suggestions"], id: \.self) { name in
-                                    DocumentTab(title: name, icon: name == "Cleanup suggestions" ? "wand.and.stars" : "doc.text", selected: transcriptTab == name, processing: name == "Cleanup suggestions" && model.isCleaning(meeting)) { transcriptTab = name }
+                            if meeting.cleanupDraft != nil || model.isCleaning(meeting) || transcriptTab == "Cleanup suggestions" {
+                                HStack(spacing: 18) {
+                                    ForEach(["Original transcript", "Cleanup suggestions"], id: \.self) { name in
+                                        DocumentTab(title: name, icon: name == "Cleanup suggestions" ? "wand.and.stars" : "doc.text", selected: transcriptTab == name, processing: name == "Cleanup suggestions" && model.isCleaning(meeting)) { activeTranscriptPassage = nil; transcriptTab = name }
+                                    }
+                                    Spacer()
                                 }
-                                Spacer()
                             }
                             if transcriptTab == "Cleanup suggestions" {
                                 CleanupSuggestionsPane(model: model, meeting: meeting, selectedChanges: $cleanupSelection, selectedSpeakers: $cleanupSpeakers) { transcriptTab = "Original transcript" }
                             } else { transcript }
                         } else { InlineSpeakers(model: model, meeting: meeting) }
-                    }.padding(.horizontal, tab == "Transcript" ? 24 : 48).padding(.vertical, 44)
-                        .frame(maxWidth: tab == "Transcript" ? .infinity : 768, alignment: .leading).frame(maxWidth: .infinity)
+                    }.padding(.horizontal, 32).padding(.vertical, 44)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background {
+                            Color.clear.contentShape(Rectangle()).onTapGesture { activeTranscriptPassage = nil }
+                        }
+                        .background(DetailScrollGutter().allowsHitTesting(false))
                 }
                 .onChange(of: targetSegment) { _, id in if let id { withAnimation { proxy.scrollTo(id, anchor: .center) } } }
             }
@@ -68,7 +76,7 @@ import JottieLibrary
             .onChange(of: model.cleanupReviewMeeting?.cleanupDraft?.id) { _, _ in
                 if model.cleanupReviewMeeting?.id == meeting.id { tab = "Transcript"; transcriptTab = "Cleanup suggestions" }
             }
-            .onChange(of: meeting.id) { _, _ in showOriginalTranscript = false; transcriptTab = "Original transcript" }
+            .onChange(of: meeting.id) { _, _ in activeTranscriptPassage = nil; showOriginalTranscript = false; transcriptTab = "Original transcript" }
             .onChange(of: meeting.transcriptRevision) { _, _ in showOriginalTranscript = false }
     }
     private var documentHeader: some View {
@@ -88,14 +96,20 @@ import JottieLibrary
     private var summary: some View {
         VStack(alignment: .leading, spacing: 32) {
             HStack {
-                Text(summaryStatus).font(JottieStyle.font(11)).foregroundStyle(JottieStyle.muted)
+                Text(model.summaryStatus(for: meeting)).font(JottieStyle.font(11)).foregroundStyle(JottieStyle.muted)
                 Spacer()
-                Button { Task { await model.regenerate(meeting) } } label: { Label("Regenerate summary", systemImage: "arrow.triangle.2.circlepath") }
-                    .buttonStyle(JottieButtonStyle(kind: .outline, compact: true)).disabled(model.working)
-                    .help("Create a new summary revision using your saved prompt and Codex settings")
+                Button { Task { await model.regenerate(meeting) } } label: {
+                    HStack(spacing: 6) {
+                        if model.isSummarizing(meeting) { ProgressView().controlSize(.mini).accessibilityHidden(true) }
+                        else { Image(systemName: "arrow.triangle.2.circlepath") }
+                        Text(model.isSummarizing(meeting) ? "Updating summary…" : "Regenerate summary")
+                    }
+                }
+                    .buttonStyle(JottieButtonStyle(kind: .outline, compact: true)).disabled(model.working || model.isSummarizing(meeting))
+                    .help("Regenerate only this meeting's summary using your saved prompt and Codex settings")
             }
             if let analysis = meeting.analysis?.analysis {
-                JottieSection(title: "At a glance") { prose(analysis.summary) }
+                JottieSection(title: "At a glance") { SummaryMarkdown(analysis.summary) }
                 if !analysis.topics.isEmpty { JottieSection(title: "Key takeaways") { bullets(analysis.topics) } }
                 JottieRule()
                 findings("Decisions", icon: "checkmark", items: analysis.decisions)
@@ -104,18 +118,12 @@ import JottieLibrary
                 if !analysis.uncertainties.isEmpty { JottieSection(title: "Uncertainties") { bullets(analysis.uncertainties) } }
                 if let reason = meeting.filingReason { prose(reason).font(JottieStyle.font(12)) }
             } else if let imported = meeting.importedSummary {
-                JottieSection(title: "Imported summary") { prose(imported) }
+                JottieSection(title: "Imported summary") { SummaryMarkdown(imported) }
                 Text("Regenerate to create evidence-backed analysis using Jottie's current prompt.").font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted)
             } else {
                 JottieEmpty(title: "Ready for a summary", message: "Enable Codex analysis in Settings, then generate a summary to see the key points, decisions and next steps.", icon: "sparkles")
             }
         }
-    }
-    private var summaryStatus: String {
-        if model.working { return "Processing · previous summary remains available" }
-        guard let revision = meeting.analysis else { return "No generated summary yet" }
-        let basis = meeting.cleanupOriginalSegments == nil ? "Original transcript" : "Cleaned transcript"
-        return revision.promptRevision == model.savedSettings.analysisRevision ? "Summary up to date · \(basis)" : "Earlier prompt · update available"
     }
     private func findings(_ title: String, icon: String, items: [Finding]) -> some View {
         JottieSection(title: title, icon: icon, count: title == "Next steps" ? items.count : nil) {
@@ -140,24 +148,33 @@ import JottieLibrary
     }
     private var transcript: some View {
         LazyVStack(alignment: .leading, spacing: 30) {
-            TranscriptCleanupTools(model: model, meeting: meeting, showOriginal: $showOriginalTranscript) { transcriptTab = "Cleanup suggestions" }
+            HStack {
+                Text("click speaker label or text to edit").font(JottieStyle.font(11)).foregroundStyle(JottieStyle.muted)
+                Spacer()
+                TranscriptCleanupTools(model: model, meeting: meeting, showOriginal: $showOriginalTranscript,
+                    beforeOpen: { activeTranscriptPassage = nil }) { transcriptTab = "Cleanup suggestions" }
+            }
             let displayed = transcriptMeeting
-            Label(displayed.reconciledSpeakers.map(\.name).joined(separator: ", "), systemImage: "person.2")
-                .font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted)
             let displayNames = displayed.displaySpeakerNames
             ForEach(displayed.segments) { segment in
                 HStack(alignment: .top, spacing: 18) {
                     Text(String(format: "%02d:%02d", segment.startMS / 60000, segment.startMS / 1000 % 60))
-                        .font(JottieStyle.mono()).foregroundStyle(JottieStyle.muted).padding(.top, 1).frame(width: 38, alignment: .leading)
+                        .font(JottieStyle.mono()).foregroundStyle(JottieStyle.muted).padding(.top, 1).frame(width: 38, alignment: .leading).onTapGesture { activeTranscriptPassage = nil }
                     VStack(alignment: .leading, spacing: 10) {
-                        Text(displayNames[segment.id] ?? "Unknown speaker").font(JottieStyle.font(12, .semibold))
-                        prose(segment.text)
+                        if showOriginalTranscript {
+                            Text(displayNames[segment.id] ?? "Unknown speaker").font(JottieStyle.font(12, .semibold))
+                            prose(segment.text)
+                        } else {
+                            TranscriptSpeakerLabel(model: model, meeting: meeting, label: segment.speaker,
+                                name: displayNames[segment.id] ?? "Unknown speaker") { activeTranscriptPassage = nil }
+                            InlineTranscriptText(model: model, meetingID: meeting.id, segment: segment, activePassage: $activeTranscriptPassage)
+                        }
                     }.frame(maxWidth: .infinity, alignment: .leading)
                 }.padding(8).background(targetSegment == segment.id ? JottieStyle.selection : .clear, in: RoundedRectangle(cornerRadius: 8)).id(segment.id)
-            }
+            }.id(meeting.id)
             JottieRule()
             Text("End of transcript · \(displayed.segments.count) segments").font(JottieStyle.font(11)).foregroundStyle(JottieStyle.muted)
-        }
+        }.contentShape(Rectangle()).onTapGesture { activeTranscriptPassage = nil }
     }
     private var transcriptMeeting: Meeting {
         var value = meeting
@@ -186,6 +203,20 @@ import JottieLibrary
     }
 }
 
+private struct DetailScrollGutter: NSViewRepresentable {
+    func makeNSView(context: Context) -> GutterView { GutterView() }
+    func updateNSView(_ view: GutterView, context: Context) { view.reserveGutter() }
+
+    final class GutterView: NSView {
+        override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); reserveGutter() }
+        func reserveGutter() {
+            guard let scroll = enclosingScrollView else { return }
+            scroll.hasVerticalScroller = true
+            scroll.autohidesScrollers = false
+        }
+    }
+}
+
 struct DocumentTab: View {
     let title: String
     let icon: String
@@ -198,11 +229,11 @@ struct DocumentTab: View {
                 HStack(spacing: 7) {
                     if processing { ProgressView().controlSize(.mini).accessibilityHidden(true) }
                     Label(title, systemImage: icon)
-                }.font(JottieStyle.font(14, selected ? .medium : .regular)).padding(.horizontal, 3)
+                }.font(JottieStyle.font(14, .medium)).padding(.horizontal, 3)
                 Rectangle().fill(selected ? JottieStyle.foreground : .clear).frame(height: 2)
             }.foregroundStyle(selected ? JottieStyle.foreground : JottieStyle.muted).contentShape(Rectangle())
         }.buttonStyle(.plain).fixedSize(horizontal: true, vertical: false).help("Show \(title.lowercased())").accessibilityAddTraits(selected ? .isSelected : [])
-            .accessibilityLabel(title).accessibilityValue(processing ? "Transcript cleanup in progress" : "")
+            .accessibilityLabel(title).accessibilityValue(processing ? (title == "Summary" ? "Summary update in progress" : "Transcript cleanup in progress") : "")
     }
 }
 
