@@ -8,6 +8,7 @@ import JottieKnowledge
 @MainActor struct LibrarySettingsView: View {
     @ObservedObject var model: LibraryViewModel
     @ViewState private var preview = false
+    @ViewState private var confirmingVoiceErase = false
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 30) {
@@ -29,7 +30,7 @@ import JottieKnowledge
                         if let controller = model.captureSettings { CaptureSettingsPane(controller: controller, people: model.directoryPeople) }
                         else { Text("Recording controls are available in the full Jottie app. This library-only window does not run the capture engine.").foregroundStyle(JottieStyle.muted) }
                     case "Integrations":
-                        VStack(alignment: .leading, spacing: 32) { calendars; JottieRule(); bamboo; DirectoryAliasSettings(model: model) }
+                        VStack(alignment: .leading, spacing: 32) { calendars; JottieRule(); bamboo; JottieRule(); voiceLearning; DirectoryAliasSettings(model: model) }
                     case "Microsoft": microsoft
                     default: mcp
                     }
@@ -193,6 +194,26 @@ import JottieKnowledge
             description(model.bambooStatus)
             description("After connecting, Jottie refreshes the directory daily while running. Sync directory fetches the latest directory now. Your key's BambooHR permissions determine which people and fields are visible. Existing summaries change only when explicitly regenerated.")
             Button("Disconnect and remove local directory", role: .destructive) { Task { await model.disconnectBamboo() } }.disabled(model.syncingBamboo)
+        }
+    }
+    private var voiceLearning: some View {
+        JottieSection(title: "Voice learning · experimental", icon: "waveform") {
+            Toggle("Remember voices on this Mac", isOn: $model.settings.voiceLearningEnabled)
+                .toggleStyle(.switch).disabled(!model.settings.bambooEnabled)
+            description("Save encrypted voice evidence from future recordings. Manually assigning clean passages to a BambooHR person teaches recognition in other saved recordings. Requires local speaker separation and Parakeet. Save settings before recording.")
+            Toggle("Automatically assign strong voice matches", isOn: $model.settings.voiceAutoAssign)
+                .toggleStyle(.switch).disabled(!model.settings.voiceLearningEnabled)
+            description("Suggestions are the default. Automatic assignment uses experimental similarity thresholds; scores are not probabilities. Only manual directory assignments teach a voice.")
+            description(model.voiceStatus)
+            HStack {
+                Button(model.updatingVoices ? "Re-evaluating…" : "Re-evaluate saved voices") { Task { await model.reevaluateVoices() } }
+                    .disabled(model.updatingVoices || model.settingsDirty)
+                Button("Erase all voice evidence…", role: .destructive) { confirmingVoiceErase = true }
+                    .disabled(model.updatingVoices)
+            }
+            .confirmationDialog("Erase all local voice evidence and profiles?", isPresented: $confirmingVoiceErase) {
+                Button("Erase voice evidence", role: .destructive) { Task { await model.eraseVoices() } }
+            } message: { Text("Voice learning will switch off. Manual speaker corrections remain. New recordings are required to learn these voices again.") }
         }
     }
     private var microsoft: some View {

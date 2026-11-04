@@ -160,6 +160,7 @@ public struct Meeting: Codable, Sendable, Equatable, Identifiable {
     public var participantContext: [ParticipantIdentity]?
     public var speakerRoles: [String: String]?
     public var speakerAttributions: [String: SpeakerAttribution]?
+    public var voiceSuggestions: [String: SpeakerAttribution]?
     public var recordingContext: RecordingContext?
     public var cleanupDraft: TranscriptCleanupRevision?
     public var activeCleanup: TranscriptCleanupRevision?
@@ -312,15 +313,18 @@ public struct LibrarySettings: Codable, Sendable, Equatable {
     public var selectedCalendarIDs: [String] = []
     public var bambooCompany = ""
     public var bambooEnabled = false
+    public var voiceLearningEnabled = false
+    public var voiceAutoAssign = false
+    public var voiceLearningGeneration = ""
     public var microsoftClientID = ""
     public var microsoftTenantID = ""
     public init() {}
     public static let efforts = ["", "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"]
-    public var analysisRevision: String { Codec.hash(summaryPrompt + "\n" + codexModel + "\n" + codexEffort + "\ntag-policy-v1\nspeaker-reconciliation-v2") }
+    public var analysisRevision: String { Codec.hash(summaryPrompt + "\n" + codexModel + "\n" + codexEffort + "\ntag-policy-v1\nspeaker-reconciliation-v3-voice") }
     public var contextRevision: String { Codec.hash(folderContextPrompt + "\n" + codexModel + "\n" + codexEffort + "\nsummary-only-v2") }
     enum CodingKeys: String, CodingKey {
         case schemaVersion, summaryPrompt, folderContextPrompt, refreshMinutes, analysisEnabled, codexPath,
-             codexModel, codexEffort, selectedCalendarIDs, microsoftClientID, microsoftTenantID, bambooCompany, bambooEnabled
+             codexModel, codexEffort, selectedCalendarIDs, microsoftClientID, microsoftTenantID, bambooCompany, bambooEnabled, voiceLearningEnabled, voiceAutoAssign, voiceLearningGeneration
     }
     public init(from decoder: Decoder) throws {
         self.init()
@@ -337,6 +341,9 @@ public struct LibrarySettings: Codable, Sendable, Equatable {
         selectedCalendarIDs = try values.decodeIfPresent([String].self, forKey: .selectedCalendarIDs) ?? []
         bambooCompany = try values.decodeIfPresent(String.self, forKey: .bambooCompany) ?? ""
         bambooEnabled = try values.decodeIfPresent(Bool.self, forKey: .bambooEnabled) ?? false
+        voiceLearningEnabled = try values.decodeIfPresent(Bool.self, forKey: .voiceLearningEnabled) ?? false
+        voiceAutoAssign = try values.decodeIfPresent(Bool.self, forKey: .voiceAutoAssign) ?? false
+        voiceLearningGeneration = try values.decodeIfPresent(String.self, forKey: .voiceLearningGeneration) ?? ""
         microsoftClientID = try values.decodeIfPresent(String.self, forKey: .microsoftClientID) ?? ""
         microsoftTenantID = try values.decodeIfPresent(String.self, forKey: .microsoftTenantID) ?? ""
     }

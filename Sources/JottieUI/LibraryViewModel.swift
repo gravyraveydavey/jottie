@@ -64,6 +64,9 @@ public struct CaptureQueueItem: Identifiable, Equatable, Sendable {
     @Published public var meetings: [Meeting] = []
     @Published public var trash: [TrashEntry] = []
     @Published public var bambooStatus = "Not connected"
+    @Published public var voiceStatus = "Voice learning is off"
+    @Published public var updatingVoices = false
+    @Published public var voiceEvidenceCounts: [UUID: Int] = [:]
     @Published public var syncingBamboo = false
     @Published public var bambooKey = ""
     @Published public var directoryPeople: [DirectoryPerson] = []
@@ -283,6 +286,10 @@ public struct CaptureQueueItem: Identifiable, Equatable, Sendable {
     public func reload() async {
         do {
             try await store.purgeTrash()
+            do {
+                let voiceReport = try await store.refreshVoiceMatches()
+                voiceStatus = voiceReport.message; voiceEvidenceCounts = voiceReport.usableWindows
+            } catch { voiceStatus = "Voice re-evaluation failed: " + error.localizedDescription }
             trash = try await store.trashEntries()
             meetings = try await store.meetings(); folders = try await store.folders()
             if !loadedSettings {
@@ -325,13 +332,35 @@ public struct CaptureQueueItem: Identifiable, Equatable, Sendable {
             }
         } catch { message = error.localizedDescription }
     }
+    public func reevaluateVoices() async {
+        guard !updatingVoices else { return }
+        updatingVoices = true
+        defer { updatingVoices = false }
+        do {
+            let report = try await store.refreshVoiceMatches()
+            message = report.message + " · \(report.changedMeetings) meetings updated. Existing summaries are unchanged."
+            await reload()
+        } catch { message = error.localizedDescription }
+    }
+    public func eraseVoices() async {
+        guard !updatingVoices else { return }
+        updatingVoices = true
+        defer { updatingVoices = false }
+        do {
+            try await store.eraseVoiceprints()
+            settings = try await store.settings(); savedSettings = settings
+            await reload()
+            message = "Local voice evidence erased and voice learning switched off. Manual speaker corrections are retained."
+        } catch { message = error.localizedDescription }
+    }
     public func loadMore() async { requestedPages += 1; await search() }
     @discardableResult public func saveSettings(processPending: Bool = true) async -> Bool {
         do {
             settings.codexModel = settings.codexModel.trimmingCharacters(in: .whitespacesAndNewlines)
             if settings.bambooEnabled { settings.bambooCompany = try BambooHR.company(settings.bambooCompany) }
-            try await store.saveSettings(settings); savedSettings = settings
+            try await store.saveSettings(settings); settings = try await store.settings(); savedSettings = settings
             message = "Settings saved. Existing analyses are unchanged."
+            await reload()
             if processPending { Task { await coordinator.run(); await reload() } }
             return true
         }

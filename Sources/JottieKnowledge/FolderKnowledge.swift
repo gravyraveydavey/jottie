@@ -131,6 +131,7 @@ public actor KnowledgeCoordinator {
         busy = true
         defer { busy = false }
         do {
+            _ = try await store.refreshVoiceMatches()
             let settings = try await store.settings()
             guard settings.analysisEnabled else { return }
             let runner = CodexRunner(executable: settings.codexPath, model: settings.codexModel, effort: settings.codexEffort)
@@ -276,7 +277,7 @@ public actor KnowledgeCoordinator {
     }
     private func enrichedMeeting(_ id: UUID, settings: LibrarySettings) async throws -> Meeting {
         var value = try await store.meeting(id)
-        if let name = defaultSpeakerName()?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty,
+        if !settings.voiceLearningEnabled, let name = defaultSpeakerName()?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty,
            value.segments.contains(where: { $0.speaker == "me" }), value.speakerNames["me"]?.isEmpty != false {
             try await store.setSpeaker("me", name: name, meetingID: id)
             value = try await store.meeting(id)

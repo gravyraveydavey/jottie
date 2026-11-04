@@ -1,8 +1,9 @@
 import Foundation
 @preconcurrency import CoreML
 import FluidAudio
+import JottieModels
 
-/// Speaker vectors exist only in the diarizer's memory. Only anonymous timed labels leave this adapter.
+/// Anonymous diarization intervals; reusable vectors leave only through the explicitly enabled private capture path.
 struct SpeakerInterval: Sendable {
     var speaker: String
     var start: Double
@@ -62,15 +63,50 @@ enum LocalSpeakerSeparation {
         try Task.checkCancellation()
         return result.segments.map { SpeakerInterval(speaker: $0.speakerId, start: Double($0.startTimeSeconds), end: Double($0.endTimeSeconds)) }
     }
+    static func analyseForVoiceLearning(_ audio: URL, models: LocalSpeakerModels = LocalSpeakerModels()) async throws -> LocalVoiceResult {
+        try Task.checkCancellation()
+        let storage = models
+        var config = OfflineDiarizerConfig()
+        config.exposeChunkEmbeddings = true
+        config.postProcessing.exclusiveSegments = false
+        let manager = OfflineDiarizerManager(config: config)
+        manager.initialize(models: try storage.load())
+        let result = try await manager.process(audio)
+        try Task.checkCancellation()
+        let intervals = result.segments.map { SpeakerInterval(speaker: $0.speakerId, start: Double($0.startTimeSeconds), end: Double($0.endTimeSeconds)) }
+        let windows = (result.chunkEmbeddings ?? []).compactMap { chunk -> VoiceSample? in
+            guard chunk.startTimeSeconds.isFinite, chunk.endTimeSeconds.isFinite,
+                  chunk.startTimeSeconds >= 0, chunk.endTimeSeconds < Double(Int.max / 1000),
+                  let embedding = VoiceSimilarity.normalized(chunk.embedding256) else { return nil }
+            let sample = VoiceSample(id: "\(chunk.chunkIndex):\(chunk.speakerIndex)", speaker: chunk.speakerId,
+                startMS: Int(chunk.startTimeSeconds * 1000), endMS: Int(chunk.endTimeSeconds * 1000), embedding: embedding)
+            guard sample.isValid else { return nil }
+            // Retain only windows with one unambiguous voice throughout their active span.
+            let overlaps = intervals.filter { $0.start * 1000 < Double(sample.endMS) && $0.end * 1000 > Double(sample.startMS) }
+            return overlaps.allSatisfy { $0.speaker == chunk.speakerId } ? sample : nil
+        }
+        // Bind profiles to the exact installed models and preprocessing, not a mutable download URL.
+        var manifest = "fluidaudio-0.15.5:community-1:mask-no-overlap-v1\n"
+        guard let walker = FileManager.default.enumerator(at: storage.directory, includingPropertiesForKeys: [.isRegularFileKey]) else { throw LocalSpeakerModels.ModelError.missing }
+        let files = walker.compactMap { $0 as? URL }.sorted { $0.path < $1.path }
+        for file in files where (try file.resourceValues(forKeys: [.isRegularFileKey])).isRegularFile == true {
+            manifest += file.path.replacingOccurrences(of: storage.directory.path, with: "") + ":" + Codec.hash(try Data(contentsOf: file, options: .mappedIfSafe)) + "\n"
+        }
+        return LocalVoiceResult(intervals: intervals, samples: windows, modelID: Codec.hash(manifest))
+    }
+    static func names(for intervals: [SpeakerInterval], side: String) -> [String: String] {
+        var names: [String: String] = [:]
+        for interval in intervals.sorted(by: { $0.start == $1.start ? $0.speaker < $1.speaker : $0.start < $1.start }) where names[interval.speaker] == nil {
+            names[interval.speaker] = "\(side) \(names.count + 1)"
+        }
+        if side == "me", names.count == 1, let key = names.keys.first { names[key] = "me" }
+        return names
+    }
     /// Assign actual timed words; never divide text proportionally or invent words/voice identities.
     static func applying(_ intervals: [SpeakerInterval], to segments: [TranscriptSegment], side: String) -> [TranscriptSegment] {
         let ordered = intervals.filter { $0.start.isFinite && $0.end.isFinite && $0.end > $0.start }
             .sorted { $0.start == $1.start ? $0.speaker < $1.speaker : $0.start < $1.start }
-        var names: [String: String] = [:]
-        for interval in ordered where names[interval.speaker] == nil { names[interval.speaker] = "\(side) \(names.count + 1)" }
-        // One mic voice retains the configured owner's label. A shared mic
-        // must never assign every acoustic cluster that same identity.
-        if side == "me", names.count == 1, let key = names.keys.first { names[key] = "me" }
+        let names = names(for: ordered, side: side)
         func label(start: Double, end: Double) -> String? {
             let unknown: String? = side == "me" ? "me unknown" : nil
             guard start.isFinite, end.isFinite, end > start else { return unknown }

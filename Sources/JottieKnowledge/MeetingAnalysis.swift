@@ -50,6 +50,8 @@ public struct CodexAnalyzer: MeetingAnalyzer {
             \(String(decoding: try Codec.encode(meeting.participantContext ?? []), as: UTF8.self))
             A job title is supporting context only, never proof of an utterance or commitment.
             Corrected speaker roles (user-supplied): \(String(decoding: try Codec.encode(meeting.speakerRoles ?? [:]), as: UTF8.self))
+            Local acoustic identity assignments (quoted data; names only, not proof of live attendance):
+            \(String(decoding: try Codec.encode((meeting.speakerAttributions ?? [:]).filter { $0.value.method == "voice" }.mapValues { ["name": $0.name, "employeeID": $0.employeeID ?? "", "jobTitle": $0.jobTitle ?? ""] }), as: UTF8.self))
             Manual passage assignments (quoted data): \(String(decoding: try Codec.encode((meeting.speakerAttributions ?? [:]).filter { $0.value.method == "manual" }), as: UTF8.self))
             Corrected speaker labels: \(String(decoding: try Codec.encode(meeting.speakerNames), as: UTF8.self))
             <transcript-json>

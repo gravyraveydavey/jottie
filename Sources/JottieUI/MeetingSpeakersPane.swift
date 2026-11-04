@@ -9,6 +9,16 @@ import JottieLibrary
     @ViewState private var correcting: ReconciledSpeaker?
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
+            if model.savedSettings.voiceLearningEnabled {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(model.voiceStatus)
+                        Text(model.voiceEvidenceCounts[meeting.id].map { "\($0) usable voice windows saved for this recording" } ?? "No saved voice evidence for this recording")
+                    }.font(JottieStyle.font(11)).foregroundStyle(JottieStyle.muted)
+                    Spacer()
+                    Button("Re-evaluate voices") { Task { await model.reevaluateVoices() } }.disabled(model.updatingVoices)
+                }
+            }
             VStack(alignment: .leading, spacing: 16) {
                 ForEach(meeting.reconciledSpeakers) { row in
                     VStack(alignment: .leading, spacing: 12) {
@@ -24,6 +34,18 @@ import JottieLibrary
                                 .buttonStyle(JottieButtonStyle(kind: .outline, compact: true))
                         }
                         FlowLayout { ForEach(row.sources, id: \.self) { JottieBadge(text: $0) } }
+                        if let suggestion = row.segmentIDs.compactMap({ meeting.voiceSuggestions?[$0] }).first,
+                           let match = suggestion.voiceMatch {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Voice suggestion: \(suggestion.name)").font(JottieStyle.font(12, .medium))
+                                Text("Similarity \(String(format: "%.2f", match.similarity)) · \(match.sampleCount) independent windows · review with Correct assignment")
+                                    .font(JottieStyle.font(11)).foregroundStyle(JottieStyle.muted)
+                            }
+                        }
+                        if let match = row.segmentIDs.compactMap({ meeting.speakerAttributions?[$0]?.voiceMatch }).first {
+                            Text("Local voice match · similarity \(String(format: "%.2f", match.similarity)) · \(match.sampleCount) independent windows")
+                                .font(JottieStyle.font(11)).foregroundStyle(JottieStyle.muted)
+                        }
                         if !row.evidence.isEmpty {
                             DisclosureGroup("Attribution evidence") {
                                 ForEach(Array(row.evidence.enumerated()), id: \.offset) { _, item in

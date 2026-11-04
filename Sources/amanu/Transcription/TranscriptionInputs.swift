@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import JottieModels
 
 /// The three ways a session's audio is handed to an engine — one call per
 /// track, one aligned stereo file, one mix — each turning what comes back
@@ -21,6 +22,9 @@ struct TranscriptionInputs {
     let engine: TranscriptionEngine
     var separateSpeakers: Bool = Config.localSpeakerSeparation()
     var speakerIntervals: @Sendable (URL) async throws -> [SpeakerInterval] = { try await LocalSpeakerSeparation.intervals(for: $0) }
+
+    var voiceCollector: VoiceCaptureCollector? = nil
+    var voiceAnalysis: @Sendable (URL) async throws -> LocalVoiceResult = { try await LocalSpeakerSeparation.analyseForVoiceLearning($0) }
 
     func segments() async throws -> [Transcript.Segment] {
         switch engine.input {
@@ -172,7 +176,12 @@ struct TranscriptionInputs {
                 segments = try await engine.transcribe(file)
                 if separateSpeakers && !segments.isEmpty {
                     log("separating local speaker voices in \(track.file)")
-                    let intervals = try await speakerIntervals(file)
+                    let intervals: [SpeakerInterval]
+                    if let voiceCollector {
+                        let result = try await voiceAnalysis(file)
+                        intervals = result.intervals
+                        try await voiceCollector.append(result, side: track.speaker, offsetMS: track.offsetMs)
+                    } else { intervals = try await speakerIntervals(file) }
                     guard !intervals.isEmpty else { throw LocalSpeakerModels.ModelError.invalidParameters }
                     segments = LocalSpeakerSeparation.applying(intervals, to: segments, side: track.speaker)
                     let clusters = Set(intervals.map(\.speaker)).count

@@ -7,14 +7,15 @@ import JottieModels
 /// lock also protects CLI/import writers, not just callers of this actor.
 public actor LibraryStore: MeetingRepository {
     public nonisolated let root: URL
-    private let readOnly: Bool
+    let readOnly: Bool
+    let voiceStorageKey: Data?
     private var index: DatabaseQueue?
     public static var defaultRoot: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Jottie", isDirectory: true)
     }
-    public init(root: URL = LibraryStore.defaultRoot, readOnly: Bool = false) throws {
-        self.root = root; self.readOnly = readOnly
+    public init(root: URL = LibraryStore.defaultRoot, readOnly: Bool = false, voiceStorageKey: Data? = nil) throws {
+        self.root = root; self.readOnly = readOnly; self.voiceStorageKey = voiceStorageKey
         if !readOnly {
             try Self.directory(root)
             for name in ["Meetings", "Contexts", "Trash"] { try Self.directory(root.appendingPathComponent(name)) }
@@ -67,7 +68,7 @@ public actor LibraryStore: MeetingRepository {
         try Codec.encode(value).write(to: url, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
-    private func locked<T>(_ work: () throws -> T) throws -> T {
+    func locked<T>(_ work: () throws -> T) throws -> T {
         guard !readOnly else { throw JottieError.invalid("This library connection is read-only.") }
         let descriptor = open(root.appendingPathComponent(".library.lock").path, O_CREAT | O_RDWR, 0o600)
         guard descriptor >= 0 else { throw JottieError.unavailable("Cannot lock the library.") }
@@ -107,7 +108,22 @@ public actor LibraryStore: MeetingRepository {
               LibrarySettings.efforts.contains(settings.codexEffort),
               settings.codexModel.isEmpty || settings.codexModel.range(of: "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$", options: .regularExpression) != nil
         else { throw JottieError.invalid("Use nonempty prompts, a valid model ID and effort, and an interval of 1–10080 minutes.") }
-        try locked { try write(settings, root.appendingPathComponent("settings.json")) }
+        try locked {
+            var settings = settings
+            let previous = try self.settings()
+            if settings.voiceLearningEnabled {
+                guard settings.bambooEnabled, !settings.bambooCompany.isEmpty else { throw JottieError.invalid("Connect BambooHR before enabling voice learning.") }
+                settings.voiceLearningGeneration = previous.voiceLearningGeneration.isEmpty ? UUID().uuidString : previous.voiceLearningGeneration
+            }
+            if previous.bambooCompany != settings.bambooCompany || !settings.bambooEnabled {
+                if previous.voiceLearningEnabled || FileManager.default.fileExists(atPath: root.appendingPathComponent("Voiceprints").path) {
+                    try VoiceEvidenceStorage(root: root, testKey: voiceStorageKey).erase()
+                    settings.voiceLearningGeneration = UUID().uuidString
+                }
+                settings.voiceLearningEnabled = false
+            }
+            try write(settings, root.appendingPathComponent("settings.json"))
+        }
     }
     /// Adopt only an explicit Codex choice from this fork's old capture settings.
     /// A saved library preference (including an explicit opt-out) always wins.
@@ -124,7 +140,7 @@ public actor LibraryStore: MeetingRepository {
     public func save(_ meeting: Meeting) throws {
         try locked { try commit(meeting) }
     }
-    private func commit(_ meeting: Meeting) throws {
+    func commit(_ meeting: Meeting) throws {
         var meeting = meeting
         if meeting.analysis != nil || meeting.importedSummary != nil,
            meeting.sourceMetadata?["summaryIdentityRevision"] == nil,
@@ -323,8 +339,8 @@ public actor LibraryStore: MeetingRepository {
                 value.analysis = nil
                 value.sourceMetadata = value.sourceMetadata ?? [:]
                 value.sourceMetadata?["cleanupNeedsSummary"] = "true"
-                // Only manual assignments survive a change to transcript evidence.
-                value.speakerAttributions = value.speakerAttributions?.filter { $0.value.method == "manual" }
+                // Manual identities and separately sourced acoustic identities survive text cleanup.
+                value.speakerAttributions = value.speakerAttributions?.filter { $0.value.method == "manual" || $0.value.method == "voice" }
             }
             revision.selectedChangeIDs = changeIDs.sorted(); revision.selectedSpeakerIDs = speakerIDs.sorted()
             value.activeCleanup = revision; value.cleanupDraft = nil
@@ -395,7 +411,7 @@ public actor LibraryStore: MeetingRepository {
             value.segments = updated
             value.transcriptRevision = Codec.hash(try Codec.encode(updated))
             value.analysis = nil
-            speakers = speakers.filter { $0.value.method == "manual" }
+            speakers = speakers.filter { $0.value.method == "manual" || $0.value.method == "voice" }
             value.sourceMetadata = value.sourceMetadata ?? [:]
             value.sourceMetadata?["cleanupNeedsSummary"] = "true"
             value.sourceMetadata?["transcriptManuallyEdited"] = "true"
@@ -413,7 +429,7 @@ public actor LibraryStore: MeetingRepository {
             value.cleanupOriginalSegments = nil; value.transcriptSourceSegmentIDs = nil; value.activeCleanup = nil; value.cleanupDraft = nil; value.analysis = nil
             value.sourceMetadata = value.sourceMetadata ?? [:]; value.sourceMetadata?["cleanupNeedsSummary"] = "true"
             value.sourceMetadata?["transcriptManuallyEdited"] = nil
-            value.speakerAttributions = value.speakerAttributions?.filter { $0.value.method == "manual" }
+            value.speakerAttributions = value.speakerAttributions?.filter { $0.value.method == "manual" || $0.value.method == "voice" }
             try commit(value)
         }
     }
@@ -598,6 +614,7 @@ public actor LibraryStore: MeetingRepository {
             for item in expired {
                 var retired = try retiredSources(); retired.insert(item.meeting.sourceID)
                 try write(retired, root.appendingPathComponent("retired-sources.json"))
+                try VoiceEvidenceStorage(root: root, testKey: voiceStorageKey).remove(item.meeting.sourceID)
                 try FileManager.default.removeItem(at: root.appendingPathComponent("Trash").appendingPathComponent(item.id))
             }
             return expired.count
@@ -850,6 +867,8 @@ public actor LibraryStore: MeetingRepository {
            value.segments.contains(where: { $0.speaker == "me" }), value.speakerNames["me"]?.isEmpty != false {
             value.speakerNames["me"] = name
         }
+
+        if try settings().voiceLearningEnabled { value.speakerNames.removeValue(forKey: "me") }
 
         return try locked {
             guard try !retiredSources().contains(sourceID) else { throw JottieError.conflict("This source is in Jottie Trash or was deleted.") }

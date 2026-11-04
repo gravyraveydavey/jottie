@@ -29,7 +29,8 @@ public struct SpeakerAttribution: Codable, Sendable, Equatable {
     public var name: String
     public var jobTitle: String?
     public var employeeID: String?
-    public var method: String // manual or analysis
+    public var method: String // manual, analysis or voice
+    public var voiceMatch: VoiceMatch?
     public var confidence: Double?
     public var basis: [String]
     public var evidence: [Evidence]
@@ -75,7 +76,7 @@ public extension Meeting {
             var names: [String: String]; var roles: [String: String]; var assignments: [String: Identity]
             var calendar: CalendarEventContext?; var participants: [String]; var people: [Person]
         }
-        let manual = (speakerAttributions ?? [:]).filter { $0.value.method == "manual" }
+        let manual = (speakerAttributions ?? [:]).filter { $0.value.method == "manual" || $0.value.method == "voice" }
             .mapValues { Identity(name: $0.name, jobTitle: $0.jobTitle, employeeID: $0.employeeID) }
         let people = (participantContext ?? []).sorted {
             ($0.company, $0.employeeID, $0.invitee) < ($1.company, $1.employeeID, $1.invitee)
@@ -191,7 +192,7 @@ public extension Meeting {
                 if let attribution {
                     let evidence = attribution.evidence.filter { !rows[index].evidence.contains($0) }
                     rows[index].evidence.append(contentsOf: evidence)
-                    let source = attribution.method == "manual" ? "User assignment" : attribution.method == "transcript" ? "Transcript label" : "AI inference"
+                    let source = attribution.method == "manual" ? "User assignment" : attribution.method == "transcript" ? "Transcript label" : attribution.method == "voice" ? "Voice match" : "AI inference"
                     if !rows[index].sources.contains(source) { rows[index].sources.append(source) }
                     rows[index].inferred = rows[index].inferred || attribution.method == "analysis"
                 }
@@ -201,7 +202,7 @@ public extension Meeting {
             if let attribution {
                 if person.map({ participants.contains($0.invitee) }) == true || participants.contains(where: { NameAliases.mentions(name, in: $0) }) { sources.append("Meeting invite") }
                 if person != nil { sources.append("BambooHR") }
-                sources.append(attribution.method == "manual" ? "User assignment" : attribution.method == "transcript" ? "Transcript label" : "AI inference")
+                sources.append(attribution.method == "manual" ? "User assignment" : attribution.method == "transcript" ? "Transcript label" : attribution.method == "voice" ? "Voice match" : "AI inference")
                 if mentioned(match.map { aliases[$0] } ?? [NameAliases.normalise(name)]) { sources.append("Name mentioned") }
             }
             rowIndex[key] = rows.count
@@ -218,7 +219,7 @@ public enum SpeakerReconciliation {
     public static func applying(_ revision: AnalysisRevision, to meeting: Meeting) -> Meeting {
         var result = meeting
         // User corrections survive regeneration; previous AI assignments are replaced, not accumulated.
-        var assignments = (meeting.speakerAttributions ?? [:]).filter { $0.value.method == "manual" }
+        var assignments = (meeting.speakerAttributions ?? [:]).filter { $0.value.method == "manual" || $0.value.method == "voice" }
         var seenPeople = Set<String>()
         let people = (meeting.participantContext ?? []).filter { seenPeople.insert($0.company + ":" + $0.employeeID).inserted }
         let segments = Dictionary(uniqueKeysWithValues: meeting.segments.map { ($0.id, $0) })

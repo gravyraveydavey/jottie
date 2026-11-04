@@ -1,4 +1,6 @@
 import Foundation
+import JottieModels
+import JottieLibrary
 
 /// Post-recording pipeline: a serial queue of session folders to transcribe.
 ///
@@ -44,6 +46,7 @@ actor TranscriptionCoordinator {
     private var current: TranscriptionEngine?
     private let onStop: @Sendable () -> String?
     private let echoCanceller: EchoCancellerFactory
+    private let voiceCapture: @Sendable () async throws -> VoiceCaptureContext?
 
     typealias EchoCancellerFactory = @Sendable () throws -> EchoCanceller
 
@@ -52,18 +55,20 @@ actor TranscriptionCoordinator {
     /// real wants the configured answer, and wants it decided late.
     init(engine: TranscriptionEngine? = nil,
          onStop: @escaping @Sendable () -> String? = { Config.onStop() },
-         echoCanceller: @escaping EchoCancellerFactory = { try EchoCanceller() }) {
+         echoCanceller: @escaping EchoCancellerFactory = { try EchoCanceller() },
+         voiceCapture: @escaping @Sendable () async throws -> VoiceCaptureContext? = { try await VoiceCaptureContext.current() }) {
         engines = EngineResolver(fixed: engine)
         self.onStop = onStop
-        self.echoCanceller = echoCanceller
+        self.echoCanceller = echoCanceller; self.voiceCapture = voiceCapture
     }
 
     init(engines: EngineResolver,
          onStop: @escaping @Sendable () -> String? = { Config.onStop() },
-         echoCanceller: @escaping EchoCancellerFactory = { try EchoCanceller() }) {
+         echoCanceller: @escaping EchoCancellerFactory = { try EchoCanceller() },
+         voiceCapture: @escaping @Sendable () async throws -> VoiceCaptureContext? = { try await VoiceCaptureContext.current() }) {
         self.engines = engines
         self.onStop = onStop
-        self.echoCanceller = echoCanceller
+        self.echoCanceller = echoCanceller; self.voiceCapture = voiceCapture
     }
 
     func setStatusHandler(_ handler: @escaping @Sendable (Status) -> Void) {
@@ -380,8 +385,14 @@ actor TranscriptionCoordinator {
             SessionState.update(dir, with: ["audio_echo_cancellation": nil])
         }
 
-        let inputs = TranscriptionInputs(
-            session: dir, audio: audioDirectory, meta: meta, engine: engine)
+        let voiceContext = try await voiceCapture()
+        let voiceCollector: VoiceCaptureCollector? = voiceContext == nil ? nil : VoiceCaptureCollector()
+        if voiceCollector != nil, !Config.localSpeakerSeparation() || engine.input != .perTrack {
+            throw VoiceCaptureError.separationRequired
+        }
+        var inputs = TranscriptionInputs(session: dir, audio: audioDirectory, meta: meta, engine: engine)
+        inputs.voiceCollector = voiceCollector
+        if let voiceContext { inputs.voiceAnalysis = voiceContext.analyse }
         var merged: [Transcript.Segment]
         var echoFilterRan = false
         var echoesDropped = 0
@@ -434,6 +445,16 @@ actor TranscriptionCoordinator {
             created_at: created.string(from: Date()),
             segments: merged
         )
+        if let voiceCollector, let voiceContext {
+            let voiceSettings = voiceContext.settings
+            let (samples, modelID) = await voiceCollector.snapshot()
+            let evidence = VoiceEvidence(sourceID: Codec.hash(dir.standardizedFileURL.path), company: voiceSettings.bambooCompany,
+                generation: voiceSettings.voiceLearningGeneration, modelID: modelID,
+                originalSegments: merged.enumerated().map { Segment(id: "s\($0.offset + 1)", speaker: $0.element.speaker,
+                    startMS: $0.element.start_ms, endMS: $0.element.end_ms, text: $0.element.text) }, samples: samples)
+            try await voiceContext.store.saveVoiceEvidence(evidence)
+            log(dir, "saved local voice evidence: \(samples.count) candidate windows")
+        }
         try TranscriptVersions.commit(transcript, to: dir)
         SessionState.update(dir, with: [
             StopHook.key: StopHook.owed,
