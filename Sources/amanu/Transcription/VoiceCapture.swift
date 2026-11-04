@@ -45,6 +45,7 @@ struct VoiceCaptureContext: Sendable {
         let root = Home.current.url.appendingPathComponent("Library/Application Support/Jottie")
         let settings = try await LibraryStore(root: root, readOnly: true).settings()
         guard settings.voiceLearningEnabled else { return nil }
-        return VoiceCaptureContext(settings: settings, store: try LibraryStore(root: root))
+        return VoiceCaptureContext(settings: settings, store: try LibraryStore(root: root),
+            analyse: { try await LocalSpeakerSeparation.analyseForVoiceLearning($0, tuning: settings.voiceTuning) })
     }
 }

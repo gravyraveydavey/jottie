@@ -101,6 +101,7 @@ public actor LibraryStore: MeetingRepository {
         return try read(LibrarySettings.self, path)
     }
     public func saveSettings(_ settings: LibrarySettings) throws {
+        guard settings.voiceTuning.isValid else { throw JottieError.invalid("Voice tuning values are outside the supported ranges.") }
         guard (1...10080).contains(settings.refreshMinutes), settings.summaryPrompt.utf8.count <= 100_000,
               !settings.summaryPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               settings.folderContextPrompt.utf8.count <= 100_000,

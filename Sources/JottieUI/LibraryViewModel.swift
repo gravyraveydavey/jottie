@@ -67,6 +67,8 @@ public struct CaptureQueueItem: Identifiable, Equatable, Sendable {
     @Published public var voiceStatus = "Voice learning is off"
     @Published public var updatingVoices = false
     @Published public var voiceEvidenceCounts: [UUID: Int] = [:]
+    @Published public var voiceDiagnostics: [UUID: [VoiceDiagnostic]] = [:]
+    @Published public var voiceCaptureTuning: [UUID: VoiceTuning] = [:]
     @Published public var syncingBamboo = false
     @Published public var bambooKey = ""
     @Published public var directoryPeople: [DirectoryPerson] = []
@@ -289,6 +291,7 @@ public struct CaptureQueueItem: Identifiable, Equatable, Sendable {
             do {
                 let voiceReport = try await store.refreshVoiceMatches()
                 voiceStatus = voiceReport.message; voiceEvidenceCounts = voiceReport.usableWindows
+                voiceDiagnostics = voiceReport.diagnostics; voiceCaptureTuning = voiceReport.captureTuning
             } catch { voiceStatus = "Voice re-evaluation failed: " + error.localizedDescription }
             trash = try await store.trashEntries()
             meetings = try await store.meetings(); folders = try await store.folders()

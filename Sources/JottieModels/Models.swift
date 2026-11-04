@@ -316,6 +316,7 @@ public struct LibrarySettings: Codable, Sendable, Equatable {
     public var voiceLearningEnabled = false
     public var voiceAutoAssign = false
     public var voiceLearningGeneration = ""
+    public var voiceTuning = VoiceTuning()
     public var microsoftClientID = ""
     public var microsoftTenantID = ""
     public init() {}
@@ -324,7 +325,7 @@ public struct LibrarySettings: Codable, Sendable, Equatable {
     public var contextRevision: String { Codec.hash(folderContextPrompt + "\n" + codexModel + "\n" + codexEffort + "\nsummary-only-v2") }
     enum CodingKeys: String, CodingKey {
         case schemaVersion, summaryPrompt, folderContextPrompt, refreshMinutes, analysisEnabled, codexPath,
-             codexModel, codexEffort, selectedCalendarIDs, microsoftClientID, microsoftTenantID, bambooCompany, bambooEnabled, voiceLearningEnabled, voiceAutoAssign, voiceLearningGeneration
+             codexModel, codexEffort, selectedCalendarIDs, microsoftClientID, microsoftTenantID, bambooCompany, bambooEnabled, voiceLearningEnabled, voiceAutoAssign, voiceLearningGeneration, voiceTuning
     }
     public init(from decoder: Decoder) throws {
         self.init()
@@ -344,6 +345,8 @@ public struct LibrarySettings: Codable, Sendable, Equatable {
         voiceLearningEnabled = try values.decodeIfPresent(Bool.self, forKey: .voiceLearningEnabled) ?? false
         voiceAutoAssign = try values.decodeIfPresent(Bool.self, forKey: .voiceAutoAssign) ?? false
         voiceLearningGeneration = try values.decodeIfPresent(String.self, forKey: .voiceLearningGeneration) ?? ""
+        voiceTuning = try values.decodeIfPresent(VoiceTuning.self, forKey: .voiceTuning) ?? VoiceTuning()
+        guard voiceTuning.isValid else { throw JottieError.invalid("Unsupported voice tuning values.") }
         microsoftClientID = try values.decodeIfPresent(String.self, forKey: .microsoftClientID) ?? ""
         microsoftTenantID = try values.decodeIfPresent(String.self, forKey: .microsoftTenantID) ?? ""
     }

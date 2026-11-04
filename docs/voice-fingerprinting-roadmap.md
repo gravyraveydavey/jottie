@@ -77,3 +77,16 @@ This is an ad-hoc signed local development build, not a Windows build or a publi
 
 
 Final outcome: all 129 reported library tests passed, including employee-ID stability through a directory rename, microphone-owner suppression during mocked regeneration and the per-window runner-up/coverage checks. The focused capture/separation rerun passed 11 checks. The arm64 pilot bundle passed signature, embedded-framework launch and macOS 14.2 checks. The full 791-check capture result, 30 Python checks and separate native renders/installed-model checks above complete automated verification for this pilot; human recognition remains unverified.
+
+
+## First human pilot feedback and tuning — 4 November 2026
+
+The user completed four separate solo recordings. Each produced two or three speaker entries. Some subsequent passages received voice matches after manual enrollment; historical re-evaluation did not succeed in that trial. The concept therefore works partially, with acoustic fragmentation and attribution coverage still unresolved. Multi-person validation remains outstanding.
+
+See [Speaker separation and voice matching controls](voice-tuning.md) for the adjustable settings and the next comparison sequence. The requested identity default is now 70/100. Separation controls retain their original 60/100 clustering default and Automatic count until explicitly changed. The earlier fixed-threshold and per-label matching descriptions above describe the first implementation; this tuning pass supersedes them.
+
+A synthetic regression reproduced the historical failure with one identical voice distributed over three anonymous labels. The fix pools individually qualifying, non-overlapping support across fragmented labels on the same audio track while assigning only covered passages. It also filters unusable evidence before independent-window selection. Matching diagnostics explain missing evidence, scores below the threshold, insufficient lead, too few supporting windows and manual protections. New recordings retain their capture tuning without changing the embedding-model identity or invalidating prior profiles.
+
+Verification: the original synthetic historical-fragmentation test failed before the fix and passed afterwards. The full macOS run passed 791 capture tests and 134 library tests, including migration to the 70/100 default, threshold replay on retained historical evidence, cross-track isolation, partial coverage and independent-window selection. The installed-model run used locally synthesized invented speech and verified that Known voices per audio track = 1 produced one acoustic speaker. New capture-tuning snapshots survived the transcription/import boundary.
+
+Native renders of the tuning controls, applied matches and rejection diagnostics were inspected. A final focused three-test run passed after improving diagnostic alignment. Interactive clicking remains unverified: Computer Use could not attach to the XCTest host and later timed out opening an isolated QA host. The temporary host was removed; no real recordings, identities or settings were changed during development tests. Model accuracy on the user's next recordings still needs a new human comparison.

@@ -25,10 +25,11 @@ public struct VoiceEvidence: Codable, Sendable, Equatable {
     /// Binds evidence to the exact original transcript, including timing, track and text.
     public var originalSegments: [Segment]
     public var samples: [VoiceSample]
+    public var captureTuning: VoiceTuning?
     public init(sourceID: String, company: String, generation: String, modelID: String,
-                originalSegments: [Segment], samples: [VoiceSample]) {
+                originalSegments: [Segment], samples: [VoiceSample], captureTuning: VoiceTuning? = nil) {
         self.sourceID = sourceID; self.company = company; self.generation = generation; self.modelID = modelID
-        self.originalSegments = originalSegments; self.samples = samples
+        self.originalSegments = originalSegments; self.samples = samples; self.captureTuning = captureTuning
     }
     /// A window is usable only if all its speech belongs to selected, unambiguous original passages.
     public func passages(for sample: VoiceSample) -> [Segment] {
@@ -72,6 +73,8 @@ public struct VoiceMatch: Codable, Sendable, Equatable {
 
 public struct VoiceprintReport: Sendable {
     public var usableWindows: [UUID: Int] = [:]
+    public var diagnostics: [UUID: [VoiceDiagnostic]] = [:]
+    public var captureTuning: [UUID: VoiceTuning] = [:]
     public var recordings = 0
     public var enrolledPeople = 0
     public var matchedPassages = 0

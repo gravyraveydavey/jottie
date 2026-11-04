@@ -451,7 +451,7 @@ actor TranscriptionCoordinator {
             let evidence = VoiceEvidence(sourceID: Codec.hash(dir.standardizedFileURL.path), company: voiceSettings.bambooCompany,
                 generation: voiceSettings.voiceLearningGeneration, modelID: modelID,
                 originalSegments: merged.enumerated().map { Segment(id: "s\($0.offset + 1)", speaker: $0.element.speaker,
-                    startMS: $0.element.start_ms, endMS: $0.element.end_ms, text: $0.element.text) }, samples: samples)
+                    startMS: $0.element.start_ms, endMS: $0.element.end_ms, text: $0.element.text) }, samples: samples, captureTuning: voiceSettings.voiceTuning)
             try await voiceContext.store.saveVoiceEvidence(evidence)
             log(dir, "saved local voice evidence: \(samples.count) candidate windows")
         }

@@ -204,6 +204,7 @@ import JottieKnowledge
             Toggle("Automatically assign strong voice matches", isOn: $model.settings.voiceAutoAssign)
                 .toggleStyle(.switch).disabled(!model.settings.voiceLearningEnabled)
             description("Suggestions are the default. Automatic assignment uses experimental similarity thresholds; scores are not probabilities. Only manual directory assignments teach a voice.")
+            VoiceTuningControls(tuning: $model.settings.voiceTuning)
             description(model.voiceStatus)
             HStack {
                 Button(model.updatingVoices ? "Re-evaluating…" : "Re-evaluate saved voices") { Task { await model.reevaluateVoices() } }

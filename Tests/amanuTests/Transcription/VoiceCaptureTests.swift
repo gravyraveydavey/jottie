@@ -51,7 +51,9 @@ import JottieLibrary
         #expect(FileManager.default.fileExists(atPath: context.store.root.appendingPathComponent("Voiceprints/\(Codec.hash(root.standardizedFileURL.path)).aes").path))
         let meeting = try await context.store.importAmanu(root, defaultSpeakerName: "Configured Owner")
         #expect(meeting.segments.map(\.startMS) == [500,10500])
-        #expect(try await context.store.refreshVoiceMatches().recordings == 1)
+        let report = try await context.store.refreshVoiceMatches()
+        #expect(report.recordings == 1)
+        #expect(report.captureTuning[meeting.id] == context.settings.voiceTuning)
         #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("system.caf").path))
     }
     @Test(.freshHome) func failedEncryptedEvidenceWritePreservesAudioAndLeavesTranscriptionPending() async throws {
@@ -76,8 +78,11 @@ func voiceEmbeddingExtractionWithInstalledModelsAndSyntheticSpeech() async throw
     let path = try #require(ProcessInfo.processInfo.environment["JOTTIE_VOICE_MODEL_AUDIO"])
     let modelRoot = try #require(ProcessInfo.processInfo.environment["JOTTIE_VOICE_MODEL_ROOT"])
     guard path.hasPrefix("/tmp/jottie-voice-model-") else { throw VoiceCaptureError.modelsChanged }
+    var tuning = VoiceTuning()
+    tuning.knownSpeakersPerTrack = Int(ProcessInfo.processInfo.environment["JOTTIE_VOICE_KNOWN_COUNT"] ?? "0") ?? 0
     let result = try await LocalSpeakerSeparation.analyseForVoiceLearning(URL(fileURLWithPath: path),
-        models: LocalSpeakerModels(root: URL(fileURLWithPath: modelRoot)))
+        models: LocalSpeakerModels(root: URL(fileURLWithPath: modelRoot)), tuning: tuning)
+    if tuning.knownSpeakersPerTrack == 1 { #expect(Set(result.intervals.map(\.speaker)).count == 1) }
     #expect(!result.intervals.isEmpty && result.samples.count >= 2)
     #expect(result.samples.allSatisfy { $0.isValid })
     #expect(result.modelID.count == 64)

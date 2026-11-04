@@ -2,6 +2,7 @@ import Foundation
 @preconcurrency import CoreML
 import FluidAudio
 import JottieModels
+import JottieLibrary
 
 /// Anonymous diarization intervals; reusable vectors leave only through the explicitly enabled private capture path.
 struct SpeakerInterval: Sendable {
@@ -55,21 +56,31 @@ struct LocalSpeakerModels: Sendable {
 }
 
 enum LocalSpeakerSeparation {
+    static func configuration(tuning: VoiceTuning, capture: Bool) -> OfflineDiarizerConfig {
+        var config = OfflineDiarizerConfig()
+        // The pinned AHC implementation consumes cosine similarity despite its distance-labelled property comment.
+        config.clustering.threshold = tuning.clusteringSimilarity
+        config.clustering.numSpeakers = tuning.knownSpeakersPerTrack > 0 ? tuning.knownSpeakersPerTrack : nil
+        config.clustering.maxSpeakers = tuning.maximumSpeakersPerTrack > 0 ? tuning.maximumSpeakersPerTrack : nil
+        config.embedding.minSegmentDurationSeconds = tuning.minimumEmbeddingSpeechSeconds
+        config.exposeChunkEmbeddings = capture
+        if capture { config.postProcessing.exclusiveSegments = false }
+        return config
+    }
     static func intervals(for audio: URL) async throws -> [SpeakerInterval] {
         try Task.checkCancellation()
-        let manager = OfflineDiarizerManager()
+        let root = Home.current.url.appendingPathComponent("Library/Application Support/Jottie")
+        let tuning = try await LibraryStore(root: root, readOnly: true).settings().voiceTuning
+        let manager = OfflineDiarizerManager(config: configuration(tuning: tuning, capture: false))
         manager.initialize(models: try LocalSpeakerModels().load())
         let result = try await manager.process(audio)
         try Task.checkCancellation()
         return result.segments.map { SpeakerInterval(speaker: $0.speakerId, start: Double($0.startTimeSeconds), end: Double($0.endTimeSeconds)) }
     }
-    static func analyseForVoiceLearning(_ audio: URL, models: LocalSpeakerModels = LocalSpeakerModels()) async throws -> LocalVoiceResult {
+    static func analyseForVoiceLearning(_ audio: URL, models: LocalSpeakerModels = LocalSpeakerModels(), tuning: VoiceTuning = VoiceTuning()) async throws -> LocalVoiceResult {
         try Task.checkCancellation()
         let storage = models
-        var config = OfflineDiarizerConfig()
-        config.exposeChunkEmbeddings = true
-        config.postProcessing.exclusiveSegments = false
-        let manager = OfflineDiarizerManager(config: config)
+        let manager = OfflineDiarizerManager(config: configuration(tuning: tuning, capture: true))
         manager.initialize(models: try storage.load())
         let result = try await manager.process(audio)
         try Task.checkCancellation()

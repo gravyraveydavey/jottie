@@ -18,6 +18,7 @@ import JottieLibrary
                     Spacer()
                     Button("Re-evaluate voices") { Task { await model.reevaluateVoices() } }.disabled(model.updatingVoices)
                 }
+                VoiceDiagnosticsView(entries: model.voiceDiagnostics[meeting.id] ?? [], capture: model.voiceCaptureTuning[meeting.id])
             }
             VStack(alignment: .leading, spacing: 16) {
                 ForEach(meeting.reconciledSpeakers) { row in

@@ -41,10 +41,94 @@ extension LibraryStore {
         var revision: String { Codec.hash(references.sorted().joined(separator: "\n")) }
     }
 
-    private struct ScoredEnrollment {
+    private struct WindowScore {
+        var sample: VoiceSample
         var profile: Enrollment
-        var scores: [Double]
-        var similarity: Double { scores.min() ?? -1 }
+        var similarity: Double
+        var runnerUpName: String?
+        var runnerUpSimilarity: Double?
+        var margin: Double
+        var supportKey: String { track + ":" + profile.profileID }
+        var track: String { String(sample.speaker.split(separator: " ").first ?? "") }
+    }
+
+    private func score(_ sample: VoiceSample, profiles: [Enrollment]) -> WindowScore? {
+        var ranked: [(Enrollment, Double)] = []
+        for profile in profiles {
+            let scores = profile.vectors.map { VoiceSimilarity.cosine(sample.embedding, $0) }.sorted()
+            guard !scores.isEmpty else { continue }
+            ranked.append((profile, scores[scores.count / 2]))
+        }
+        ranked.sort { $0.1 == $1.1 ? $0.0.profileID < $1.0.profileID : $0.1 > $1.1 }
+        guard let best = ranked.first else { return nil }
+        let second = ranked.dropFirst().first
+        return WindowScore(sample: sample, profile: best.0, similarity: best.1,
+            runnerUpName: second?.0.person.name, runnerUpSimilarity: second?.1, margin: best.1 - (second?.1 ?? 0))
+    }
+
+    private func matchWindows(meeting: Meeting, record: VoiceEvidence, profiles: [Enrollment], tuning: VoiceTuning)
+        -> (matches: [String: SpeakerAttribution], diagnostics: [VoiceDiagnostic]) {
+        let independent = Self.independent(record.samples.filter { !record.passages(for: $0).isEmpty })
+        let usable = independent.filter { !record.passages(for: $0).isEmpty }
+        let compatible = profiles.filter { $0.modelID == record.modelID }
+        let scores = usable.compactMap { score($0, profiles: compatible) }
+        func protected(_ score: WindowScore) -> Bool {
+            if meeting.speakerNames[score.sample.speaker]?.isEmpty == false || meeting.hasNamedSourceLabel(score.sample.speaker) { return true }
+            return record.passages(for: score.sample).contains { passage in
+                guard let assignment = meeting.speakerAttributions?[passage.id], assignment.method == "manual" else { return false }
+                return assignment.name.isEmpty || assignment.employeeID != score.profile.person.id
+            }
+        }
+        let eligible = scores.filter { $0.similarity >= tuning.matchSimilarity && $0.margin >= tuning.matchMargin && !protected($0) }
+        // Agreeing windows can support one another across over-split labels on the same track.
+        // Window identities are still decided individually; a neighbouring label cannot force a match.
+        let support = Dictionary(grouping: eligible, by: \.supportKey)
+        var matches: [String: SpeakerAttribution] = [:]
+        var matchedLabels = Set<String>()
+        for group in support.values where group.count >= tuning.minimumMatchingWindows {
+            guard let first = group.first else { continue }
+            let covered = record.coveredPassageIDs(by: group.map(\.sample))
+            var attribution = SpeakerAttribution(name: first.profile.person.name, jobTitle: first.profile.person.jobTitle,
+                employeeID: first.profile.person.id, method: "voice", basis: ["local_voice_match"])
+            attribution.voiceMatch = VoiceMatch(profileID: first.profile.profileID, company: first.profile.company,
+                modelID: record.modelID, profileRevision: first.profile.revision,
+                similarity: group.map(\.similarity).min() ?? 0, margin: group.map(\.margin).min() ?? 0, sampleCount: group.count)
+            for segment in meeting.segments {
+                let sourceIDs = meeting.transcriptSourceSegmentIDs?[segment.id] ?? [segment.id]
+                guard !sourceIDs.isEmpty, sourceIDs.allSatisfy(covered.contains),
+                      meeting.speakerAttributions?[segment.id]?.method != "manual",
+                      meeting.speakerNames[segment.speaker]?.isEmpty != false, !meeting.hasNamedSourceLabel(segment.speaker) else { continue }
+                matches[segment.id] = attribution; matchedLabels.insert(segment.speaker)
+            }
+        }
+        var diagnostics: [VoiceDiagnostic] = []
+        for label in Set(meeting.originalTranscript.map(\.speaker)).sorted() {
+            let raw = record.samples.filter { $0.speaker == label }
+            let own = scores.filter { $0.sample.speaker == label }
+            let accepted = eligible.filter { $0.sample.speaker == label }
+            var item = VoiceDiagnostic(speaker: label, storedWindows: raw.count,
+                usableWindows: usable.filter { $0.speaker == label }.count, reason: "No usable saved windows")
+            if let first = own.first {
+                let names = Set(own.map { $0.profile.person.name })
+                item.bestName = names.count == 1 ? first.profile.person.name : "Different candidates across windows"
+                item.similarity = own.map(\.similarity).min()
+                let strongestCompetitor = own.max { ($0.runnerUpSimilarity ?? -1) < ($1.runnerUpSimilarity ?? -1) }
+                item.runnerUpName = strongestCompetitor?.runnerUpName
+                item.runnerUpSimilarity = strongestCompetitor?.runnerUpSimilarity
+                item.margin = own.map(\.margin).min()
+                item.supportingWindows = accepted.map { support[$0.supportKey]?.count ?? 0 }.max() ?? 0
+                if own.allSatisfy(protected) { item.reason = "Manual correction retained" }
+                else if accepted.isEmpty {
+                    item.reason = own.allSatisfy({ $0.similarity < tuning.matchSimilarity }) ? "Below voice-match similarity" : "Similarity or lead over next person is too small"
+                } else if item.supportingWindows < tuning.minimumMatchingWindows {
+                    item.reason = "Too few independent supporting windows (need \(tuning.minimumMatchingWindows))"
+                } else { item.reason = matchedLabels.contains(label) ? "Matched covered passages" : "Only manual or insufficiently covered passages remain" }
+            } else if item.usableWindows > 0 {
+                item.reason = profiles.isEmpty ? "No enrolled profile: assign at least two usable windows to a directory person" : "No enrolled profile for this embedding model"
+            }
+            diagnostics.append(item)
+        }
+        return (matches, diagnostics)
     }
 
     private func applyVoiceMatches(people: [DirectoryPerson], configuration: LibrarySettings) throws -> VoiceprintReport {
@@ -65,7 +149,7 @@ extension LibraryStore {
             var profiles: [String: Enrollment] = [:]
             for meeting in all {
                 guard let record = records[meeting.id] else { continue }
-                for sample in Self.independent(record.samples) {
+                for sample in Self.independent(record.samples.filter { !record.passages(for: $0).isEmpty }) {
                     let passages = record.passages(for: sample)
                     guard !passages.isEmpty else { continue }
                     let assignments = passages.compactMap { meeting.speakerAttributions?[$0.id] }
@@ -83,62 +167,22 @@ extension LibraryStore {
             // Independent windows, not overlapping copies of the same utterance.
             profiles = profiles.filter { $0.value.vectors.count >= 2 }
             var report = VoiceprintReport()
-            report.usableWindows = records.mapValues { record in Self.independent(record.samples).filter { !record.passages(for: $0).isEmpty }.count }
+            report.usableWindows = records.mapValues { record in Self.independent(record.samples.filter { !record.passages(for: $0).isEmpty }).count }
             report.recordings = records.count; report.enrolledPeople = Set(profiles.values.map { $0.person.id }).count
             for meeting in all {
                 var updated = meeting
                 var assignments = (meeting.speakerAttributions ?? [:]).filter { $0.value.method != "voice" }
                 var suggestions: [String: SpeakerAttribution] = [:]
                 if let record = records[meeting.id] {
-                    let groups = Dictionary(grouping: Self.independent(record.samples), by: \.speaker)
-                    for (speaker, windows) in groups {
-                        guard meeting.speakerNames[speaker]?.isEmpty != false else { continue }
-                        let usable = windows.filter { !record.passages(for: $0).isEmpty }
-                        guard usable.count >= 2 else { continue }
-                        var candidates: [ScoredEnrollment] = []
-                        for profile in profiles.values where profile.modelID == record.modelID {
-                            var windowScores: [Double] = []
-                            for sample in usable {
-                                var scores: [Double] = []
-                                for vector in profile.vectors { scores.append(VoiceSimilarity.cosine(sample.embedding, vector)) }
-                                scores.sort()
-                                windowScores.append(scores[scores.count / 2])
-                            }
-                            candidates.append(ScoredEnrollment(profile: profile, scores: windowScores))
-                        }
-                        candidates.sort { left, right in
-                            if left.similarity == right.similarity { return left.profile.profileID < right.profile.profileID }
-                            return left.similarity > right.similarity
-                        }
-                        guard let best = candidates.first, best.similarity >= 0.80 else { continue }
-                        var margin = 2.0
-                        for index in usable.indices {
-                            let runnerUp = candidates.dropFirst().map { $0.scores[index] }.max() ?? 0
-                            margin = min(margin, best.scores[index] - runnerUp)
-                        }
-                        guard margin >= 0.12 else { continue }
-                        // A confirmed different identity on the same acoustic cluster invalidates propagation.
-                        let passages = meeting.segments.filter { $0.speaker == speaker }
-                        guard !passages.contains(where: {
-                            guard let manual = assignments[$0.id], manual.method == "manual" else { return false }
-                            return manual.name.isEmpty || manual.employeeID != best.profile.person.id
-                        }) else { continue }
-                        var attribution = SpeakerAttribution(name: best.profile.person.name, jobTitle: best.profile.person.jobTitle,
-                            employeeID: best.profile.person.id, method: "voice", basis: ["local_voice_match"])
-                        attribution.voiceMatch = VoiceMatch(profileID: best.profile.profileID, company: best.profile.company,
-                            modelID: record.modelID, profileRevision: best.profile.revision, similarity: best.similarity,
-                            margin: margin, sampleCount: usable.count)
-                        // Only covered original passages; don't spread a name across an entire possibly merged cluster.
-                        let covered = record.coveredPassageIDs(by: usable)
-                        for segment in meeting.segments {
-                            let sourceIDs = meeting.transcriptSourceSegmentIDs?[segment.id] ?? [segment.id]
-                            guard segment.speaker == speaker, !sourceIDs.isEmpty, sourceIDs.allSatisfy(covered.contains),
-                                  assignments[segment.id]?.method != "manual", !meeting.hasNamedSourceLabel(segment.speaker) else { continue }
-                            if settings.voiceAutoAssign { assignments[segment.id] = attribution }
-                            else { suggestions[segment.id] = attribution }
-                            report.matchedPassages += 1
-                        }
-                    }
+                    let result = matchWindows(meeting: meeting, record: record, profiles: Array(profiles.values), tuning: settings.voiceTuning)
+                    report.diagnostics[meeting.id] = result.diagnostics
+                    report.captureTuning[meeting.id] = record.captureTuning
+                    report.matchedPassages += result.matches.count
+                    if settings.voiceAutoAssign { assignments.merge(result.matches) { _, voice in voice } }
+                    else { suggestions = result.matches }
+                } else if settings.voiceLearningEnabled {
+                    report.diagnostics[meeting.id] = [VoiceDiagnostic(speaker: "recording", storedWindows: 0, usableWindows: 0,
+                        reason: "No compatible saved voice evidence. Deleted audio cannot be separated again.")]
                 }
                 updated.speakerAttributions = assignments.isEmpty ? nil : assignments
                 updated.voiceSuggestions = suggestions.isEmpty ? nil : suggestions
@@ -150,12 +194,12 @@ extension LibraryStore {
         }
     }
 
-    /// Deterministic, non-overlapping selection per track/cluster, retaining source contribution IDs.
+    /// Deterministic, non-overlapping selection per audio track, retaining source contribution IDs.
     private static func independent(_ samples: [VoiceSample]) -> [VoiceSample] {
         var ends: [String: Int] = [:]
         return samples.sorted { $0.startMS == $1.startMS ? $0.id < $1.id : $0.startMS < $1.startMS }.filter { sample in
-            guard sample.isValid, sample.startMS >= ends[sample.speaker, default: 0] else { return false }
-            ends[sample.speaker] = sample.endMS
+            guard sample.isValid, sample.startMS >= ends[String(sample.speaker.split(separator: " ").first ?? ""), default: 0] else { return false }
+            ends[String(sample.speaker.split(separator: " ").first ?? "")] = sample.endMS
             return true
         }
     }

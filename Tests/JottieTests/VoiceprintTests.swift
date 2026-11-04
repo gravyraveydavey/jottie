@@ -12,6 +12,25 @@ private func voiceVector(_ angle: Double = 0) -> [Float] {
     result[0] = Float(cos(angle)); result[1] = Float(sin(angle)); return result
 }
 
+@Test func laterEnrollmentRecognizesEarlierVoiceSplitAcrossAnonymousClusters() async throws {
+    let f = try await VoiceFixture.create(); defer { try? FileManager.default.removeItem(at: f.root) }
+    let history = Meeting(sourceID: Codec.hash("fragmented-history"), title: "Earlier solo recording", segments: (0..<3).map {
+        Segment(id: "p\($0)", speaker: "me \($0 + 1)", startMS: $0 * 10000, endMS: ($0 + 1) * 10000, text: "Invented solo speech \($0).")
+    })
+    try await f.store.save(history)
+    let settings = try await f.store.settings()
+    try await f.store.saveVoiceEvidence(VoiceEvidence(sourceID: history.sourceID, company: settings.bambooCompany,
+        generation: settings.voiceLearningGeneration, modelID: "synthetic-model", originalSegments: history.segments,
+        samples: history.segments.map { VoiceSample(id: $0.id, speaker: $0.speaker, startMS: $0.startMS, endMS: $0.endMS, embedding: voiceVector()) }))
+    let newer = try await f.recording("newer-enrollment")
+    try await f.assign(newer, employee: "alice")
+    _ = try await f.store.refreshVoiceMatches()
+    let updated = try await f.store.meeting(history.id)
+    #expect(updated.speakerAttributions?.count == 3)
+    #expect(updated.segments == history.segments)
+    #expect(updated.speakerAttributions?.values.allSatisfy { $0.employeeID == "alice" } == true)
+}
+
 private struct VoiceFixture {
     let root: URL
     let store: LibraryStore
@@ -244,13 +263,14 @@ private struct VoiceFixture {
         try data.write(to: output.appendingPathComponent(name + ".png"))
     }
     model.settingsTab = "Integrations"
-    try render(LibrarySettingsView(model: model), name: "settings", height: 1600)
-    try render(InlineSpeakers(model: model, meeting: matched), name: "matched-speaker", height: 850)
+    try render(LibrarySettingsView(model: model), name: "settings", height: 2200)
+    try render(VoiceTuningControls(tuning: Binding(get: { model.settings.voiceTuning }, set: { model.settings.voiceTuning = $0 })), name: "voice-tuning", height: 900)
+    try render(InlineSpeakers(model: model, meeting: matched), name: "matched-speaker", height: 1200)
     var settings = try await f.store.settings(); settings.voiceAutoAssign = false; try await f.store.saveSettings(settings)
     await model.reload()
     let suggested = try #require(model.meetings.first { $0.id == query.id })
     #expect(suggested.voiceSuggestions?["s1"]?.employeeID == "alice")
-    try render(InlineSpeakers(model: model, meeting: suggested), name: "suggested-speaker", height: 850)
+    try render(InlineSpeakers(model: model, meeting: suggested), name: "suggested-speaker", height: 1200)
 }
 
 private struct VoiceFixtureAnalyzer: MeetingAnalyzer {
@@ -299,4 +319,78 @@ private struct VoiceFixtureAnalyzer: MeetingAnalyzer {
     #expect(after.speakerAttributions?["s1"]?.name == "Alex Example")
     #expect(after.speakerAttributions?["s1"]?.jobTitle == "Designer")
     #expect(after.speakerAttributions?["s1"]?.voiceMatch?.profileID == before)
+}
+
+@Test func voiceTuningStartsAtSeventyAndReplaysHistoricalScoresWithoutAudio() async throws {
+    let legacy = try Codec.decode(LibrarySettings.self, from: Data("{}".utf8))
+    #expect(legacy.voiceTuning.matchSimilarity == 0.70)
+    let f = try await VoiceFixture.create(); defer { try? FileManager.default.removeItem(at: f.root) }
+    let donor = try await f.recording("donor"), query = try await f.recording("historical-score", vector: voiceVector(acos(0.75)))
+    try await f.assign(donor, employee: "alice")
+    _ = try await f.store.refreshVoiceMatches()
+    #expect(try await f.store.meeting(query.id).speakerAttributions?["s1"]?.employeeID == "alice")
+    var settings = try await f.store.settings(); settings.voiceTuning.matchSimilarity = 0.80
+    settings.voiceTuning.clusteringSimilarity = 0.47; settings.voiceTuning.knownSpeakersPerTrack = 1
+    settings.voiceTuning.maximumSpeakersPerTrack = 2; settings.voiceTuning.minimumEmbeddingSpeechSeconds = 2.5
+    try await f.store.saveSettings(settings)
+    #expect(try await LibraryStore(root: f.root).settings().voiceTuning == settings.voiceTuning)
+    let report = try await f.store.refreshVoiceMatches()
+    #expect(try await f.store.meeting(query.id).speakerAttributions == nil)
+    let diagnostic = try #require(report.diagnostics[query.id]?.first)
+    #expect(abs((diagnostic.similarity ?? 0) - 0.75) < 0.001)
+    #expect(diagnostic.reason.contains("Below"))
+    settings.voiceTuning.matchSimilarity = .nan
+    await #expect(throws: JottieError.self) { try await f.store.saveSettings(settings) }
+    #expect(try await f.store.settings().voiceTuning.matchSimilarity == 0.80)
+}
+
+@Test func differentAudioTracksCannotSupplyOneMatchingWindowEach() async throws {
+    let f = try await VoiceFixture.create(); defer { try? FileManager.default.removeItem(at: f.root) }
+    let donor = try await f.recording("donor"); try await f.assign(donor, employee: "alice")
+    let query = Meeting(sourceID: Codec.hash("echo-query"), title: "Two tracks", segments: [
+        Segment(id: "mic", speaker: "me 1", startMS: 0, endMS: 10000, text: "Invented microphone speech."),
+        Segment(id: "remote", speaker: "them 1", startMS: 0, endMS: 10000, text: "Invented system speech.")])
+    try await f.store.save(query)
+    let settings = try await f.store.settings()
+    try await f.store.saveVoiceEvidence(VoiceEvidence(sourceID: query.sourceID, company: settings.bambooCompany,
+        generation: settings.voiceLearningGeneration, modelID: "synthetic-model", originalSegments: query.segments,
+        samples: query.segments.map { VoiceSample(id: $0.id, speaker: $0.speaker, startMS: $0.startMS, endMS: $0.endMS, embedding: voiceVector()) }))
+    let report = try await f.store.refreshVoiceMatches()
+    #expect(try await f.store.meeting(query.id).speakerAttributions == nil)
+    #expect(report.diagnostics[query.id]?.allSatisfy { $0.supportingWindows == 1 } == true)
+    var changed = settings; changed.voiceTuning.minimumMatchingWindows = 1; try await f.store.saveSettings(changed)
+    _ = try await f.store.refreshVoiceMatches()
+    #expect(try await f.store.meeting(query.id).speakerAttributions?.count == 2)
+}
+
+@Test func poorWindowDoesNotDiscardOtherCoveredMatchingPassages() async throws {
+    let f = try await VoiceFixture.create(); defer { try? FileManager.default.removeItem(at: f.root) }
+    let donor = try await f.recording("donor"); try await f.assign(donor, employee: "alice")
+    let query = Meeting(sourceID: Codec.hash("partly-poor-query"), title: "Partial evidence", segments: (0..<3).map {
+        Segment(id: "p\($0)", speaker: "me 1", startMS: $0 * 10000, endMS: ($0 + 1) * 10000, text: "Invented speech \($0).") })
+    try await f.store.save(query)
+    let settings = try await f.store.settings()
+    try await f.store.saveVoiceEvidence(VoiceEvidence(sourceID: query.sourceID, company: settings.bambooCompany,
+        generation: settings.voiceLearningGeneration, modelID: "synthetic-model", originalSegments: query.segments,
+        samples: query.segments.enumerated().map { index, passage in
+            VoiceSample(id: passage.id, speaker: passage.speaker, startMS: passage.startMS, endMS: passage.endMS,
+                embedding: index == 2 ? voiceVector(.pi / 2) : voiceVector(acos(0.75))) }))
+    _ = try await f.store.refreshVoiceMatches()
+    let result = try await f.store.meeting(query.id)
+    #expect(result.speakerAttributions?.count == 2 && result.speakerAttributions?["p2"] == nil)
+}
+
+@Test func unusableEarlyWindowDoesNotHideLaterCleanEnrollmentEvidence() async throws {
+    let f = try await VoiceFixture.create(); defer { try? FileManager.default.removeItem(at: f.root) }
+    let donor = Meeting(sourceID: Codec.hash("partly-uncertain-donor"), title: "Clean windows", segments: [
+        Segment(id: "uncertain", speaker: "me unknown", startMS: 0, endMS: 2000, text: "Uncertain speech."),
+        Segment(id: "confirmed", speaker: "me 1", startMS: 2000, endMS: 22000, text: "Invented confirmed speech.")])
+    try await f.store.save(donor)
+    let settings = try await f.store.settings()
+    let samples = [(0,10000), (2000,12000), (12000,22000)].enumerated().map { index, span in
+        VoiceSample(id: "w\(index)", speaker: "me 1", startMS: span.0, endMS: span.1, embedding: voiceVector()) }
+    try await f.store.saveVoiceEvidence(VoiceEvidence(sourceID: donor.sourceID, company: settings.bambooCompany,
+        generation: settings.voiceLearningGeneration, modelID: "synthetic-model", originalSegments: donor.segments, samples: samples))
+    try await f.store.setSpeakerAssignment(segmentIDs: ["confirmed"], name: "Alice Example", role: nil, employeeID: "alice", meetingID: donor.id)
+    #expect(try await f.store.refreshVoiceMatches().enrolledPeople == 1)
 }
