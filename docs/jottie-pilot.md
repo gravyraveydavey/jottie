@@ -2,6 +2,10 @@
 
 The capture pipeline remains in the inherited executable target. New work is isolated into models, library persistence, knowledge processing, SwiftUI and MCP targets. JSON contracts are version 1; Windows should implement these contracts rather than sharing macOS view code.
 
+## Voice fingerprinting pilot
+
+See [Local voice fingerprinting roadmap](voice-fingerprinting-roadmap.md) for the opt-in capture/enrollment pipeline, correction-driven re-evaluation and staged human testing. This adds reusable encrypted local voice evidence; it is separate from text-only speaker reconciliation.
+
 ## Persistence contract
 
 The meeting.json file is the meeting commit marker and includes complete source text, speaker corrections, logical assignment and selected analysis revision. Analysis files and readable projections are written before that marker. Folder IDs never derive from names. A manually filed meeting remains manually filed on re-analysis.
