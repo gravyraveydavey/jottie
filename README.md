@@ -6,14 +6,14 @@ A native macOS meeting library built on Amanu’s MIT-licensed recording and loc
 
 1. Build and launch `Jottie.app` using `make app` and `open .build/Jottie.app`. Complete microphone/system-audio setup and download a local transcription model.
 2. Open **Recordings** from the recording window or menu bar to show the new library. You can also run `jottie library` to open the library without capture.
-3. Open **Settings → General** from the app menu or library gear and enable automatic Codex analysis. The status shows the detected executable, version and ChatGPT sign-in; **Check Codex** refreshes it. **Test connection** submits a small invented prompt using your Codex allowance. Select an executable if automatic discovery cannot find it. Transcripts and selected context go to OpenAI; subscription usage limits apply. There is no paid API fallback.
+3. Enable automatic Codex analysis under **Settings → Summaries**. **Integrations → Codex** shows installation/sign-in status; **Check Codex** refreshes it and **Test connection** submits an invented prompt using your Codex allowance. Enable Advanced to override the executable path. Transcripts and selected context go to OpenAI; subscription usage limits apply. There is no paid API fallback.
 4. Create your folder tree. Folder names and comma-separated aliases match the AI’s primary tag. Unknown or ambiguous matches stay in Import. Dragging a meeting makes its assignment authoritative until you move it again.
-5. Choose calendars under **Settings → Calendars**. Enable calendar context separately under Recording settings and relaunch. Calendar invitees are candidates, not verified speakers.
+5. Choose calendars and enable calendar context under **Settings → Integrations → Calendars**, then relaunch if requested. Calendar invitees are candidates, not verified speakers.
 6. Folder context checks default to hourly while the app runs. Change the interval or use **Update now**. Parents include descendant meetings. Pending changes show the last successful context as stale.
 
 **Import transcripts** scans folders and subfolders for Markdown, text and Word documents, or imports selected files. It preserves originals, deduplicates repeats and excludes audio. Existing Amanu meeting bundles retain their text and metadata. **Import** in the sidebar contains unfiled records. Select one or multiple meetings and use **Export Markdown** to write UUID-named files. **Speakers** corrects channel labels without changing source utterances; regenerate analysis explicitly to apply corrections to summaries.
 
-**Settings → General** selects the Codex model and reasoning effort; **Settings → Summary** edits separate meeting and folder prompts. Folder context rolls up structured meeting summaries, with evidence links, rather than sending nested transcripts. Tags reuse the existing catalog where suitable and are capped at ten per meeting. See [custom UI feasibility](docs/custom-ui-feasibility.md) for the planned design scope.
+**Settings → Summaries** selects the Codex model and reasoning effort. Enable **Advanced** to edit meeting and folder prompts. [Settings layout](docs/settings-layout.md) maps all controls, including voice learning under Recording. Folder context rolls up structured meeting summaries, with evidence links, rather than sending nested transcripts. Tags reuse the existing catalog where suitable and are capped at ten per meeting. See [custom UI feasibility](docs/custom-ui-feasibility.md) for the planned design scope.
 
 ## Storage and recovery
 
@@ -34,7 +34,7 @@ Back up the complete Jottie directory and its private configuration. Do not sync
 
 ## Local MCP
 
-Use **Settings → General → Copy Codex MCP configuration** or add:
+Use **Settings → Integrations → MCP → Copy Codex MCP configuration** or add:
 
 ```toml
 [mcp_servers.jottie]

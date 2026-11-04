@@ -18,7 +18,7 @@ Native views use the existing repository and knowledge services. Colours, radii,
 | `meeting-detail.tsx` | `MeetingDetailPane.swift` | Summary, timestamped full transcript, editable speakers, copy, stars, regeneration and evidence links |
 | `folder-summary.tsx` | `FolderDetailPane.swift` | Real summary-only subtree context, freshness, updates, findings and source meetings |
 | `queue-view.tsx` | `QueuePane.swift` | Actual outstanding analysis/context/publication jobs, progress, errors and retries |
-| `settings-view.tsx` | `LibraryEditors.swift` | Full-page prompt settings plus native Codex, capture, calendar, Microsoft and MCP controls |
+| `settings-view.tsx` | `LibraryEditors.swift` | Four settings pages with subsections and shared Advanced visibility; see [settings layout](settings-layout.md) |
 
 A regular click selects one meeting; Command-click toggles items and Shift-click extends from the focused meeting. Arrow keys move through the list and Command-A selects the loaded results. Dragging a selected meeting files the selection together. Context menus retain batch export, regeneration, moving and local Trash; multiple selection also reveals export/Trash in the list footer. Pagination remains explicit rather than loading an unbounded library. Folder context opens when selecting the folder; choosing a meeting replaces that context in the reading pane.
 

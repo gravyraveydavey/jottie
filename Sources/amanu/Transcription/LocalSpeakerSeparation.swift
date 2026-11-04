@@ -59,7 +59,9 @@ enum LocalSpeakerSeparation {
     static func configuration(tuning: VoiceTuning, capture: Bool) -> OfflineDiarizerConfig {
         var config = OfflineDiarizerConfig()
         // The pinned AHC implementation consumes cosine similarity despite its distance-labelled property comment.
-        config.clustering.threshold = tuning.clusteringSimilarity
+        // SDK validation requires a positive threshold. Zero on the 0–100 scale
+        // uses the closest practical positive cosine threshold.
+        config.clustering.threshold = max(0.000001, tuning.clusteringSimilarity)
         config.clustering.numSpeakers = tuning.knownSpeakersPerTrack > 0 ? tuning.knownSpeakersPerTrack : nil
         config.clustering.maxSpeakers = tuning.maximumSpeakersPerTrack > 0 ? tuning.maximumSpeakersPerTrack : nil
         config.embedding.minSegmentDurationSeconds = tuning.minimumEmbeddingSpeechSeconds
@@ -118,7 +120,7 @@ enum LocalSpeakerSeparation {
         let ordered = intervals.filter { $0.start.isFinite && $0.end.isFinite && $0.end > $0.start }
             .sorted { $0.start == $1.start ? $0.speaker < $1.speaker : $0.start < $1.start }
         let names = names(for: ordered, side: side)
-        func label(start: Double, end: Double) -> String? {
+        func label(start: Double, end: Double, timedWord: Bool = false) -> String? {
             let unknown: String? = side == "me" ? "me unknown" : nil
             guard start.isFinite, end.isFinite, end > start else { return unknown }
             var ranges: [String: [(Double, Double)]] = [:]
@@ -133,9 +135,23 @@ enum LocalSpeakerSeparation {
                 return covered
             }
             let ranked = overlap.sorted { $0.value == $1.value ? $0.key < $1.key : $0.value > $1.value }
-            guard let first = ranked.first, first.value / (end - start) >= 0.65,
-                  first.value - (ranked.dropFirst().first?.value ?? 0) >= (end - start) * 0.2 else { return unknown }
-            return names[first.key]
+            if let first = ranked.first, first.value / (end - start) >= 0.65,
+               first.value - (ranked.dropFirst().first?.value ?? 0) >= (end - start) * 0.2 { return names[first.key] }
+            // ASR word edges and segmentation edges can differ slightly. Rescue only
+            // short, actually overlapping words at one unambiguous interval boundary.
+            // Never borrow a voice across silence, a competing turn or a coarse sentence.
+            let tolerance = 0.15
+            if timedWord, end - start <= 1,
+               let interval = ordered.first(where: {
+                   min(end, $0.end) - max(start, $0.start) >= (end - start) * 0.25
+                       && ($0.start <= start || $0.end >= end)
+                       && $0.start <= start + tolerance && $0.end >= end - tolerance
+                       && max(0, $0.start - start) + max(0, end - $0.end) <= tolerance
+               }),
+               !ordered.contains(where: { $0.speaker != interval.speaker && $0.start < end + tolerance && $0.end > start - tolerance }) {
+                return names[interval.speaker]
+            }
+            return unknown
         }
         var output: [TranscriptSegment] = []
         for segment in segments {
@@ -151,7 +167,7 @@ enum LocalSpeakerSeparation {
                 current = []
             }
             for word in words {
-                let next = label(start: word.start, end: word.end)
+                let next = label(start: word.start, end: word.end, timedWord: true)
                 if !current.isEmpty && next != currentLabel { flush() }
                 currentLabel = next; current.append(word)
             }

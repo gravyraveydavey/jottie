@@ -9,7 +9,7 @@ import JottieModels
         let store = EKEventStore()
         let allowed = EKEventStore.authorizationStatus(for: .event) == .fullAccess || EventKitCalendars.grantedDuringProcess
             ? true : try await store.requestFullAccessToEvents()
-        guard allowed else { throw JottieError.unavailable("Calendar access was denied. Manage it in Settings → Recording.") }
+        guard allowed else { throw JottieError.unavailable("Calendar access was denied. Manage it in Settings → Integrations → Calendars.") }
         EventKitCalendars.grantedDuringProcess = true
         store.reset()
         let calendars = store.calendars(for: .event).filter { selectedIDs.contains($0.calendarIdentifier) }
@@ -70,7 +70,12 @@ import JottieModels
             }.frame(minHeight: 100, maxHeight: 350)
             Text("This updates context for this meeting. Existing analysis revisions stay unchanged until you regenerate. It does not split or rename any voice channel.")
                 .font(JottieStyle.font(11)).foregroundStyle(JottieStyle.muted)
-            HStack { Spacer(); Button("Cancel") { dismiss() } }
+            HStack {
+                if meeting.calendarContext != nil {
+                    Button("Remove calendar match") { Task { await model.attachCalendar(nil, to: meeting); dismiss() } }
+                }
+                Spacer(); Button("Cancel") { dismiss() }
+            }
         }.padding(24).frame(width: 660).background(JottieStyle.background).foregroundStyle(JottieStyle.foreground)
             .buttonStyle(JottieButtonStyle(kind: .outline))
             .task {

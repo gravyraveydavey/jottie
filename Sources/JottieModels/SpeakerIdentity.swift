@@ -115,12 +115,13 @@ public extension Meeting {
     }
     func unknownSpeakerName(_ label: String) -> String {
         let labels = Array(Set((cleanupOriginalSegments ?? []).map(\.speaker) + segments.map(\.speaker))).sorted()
+        if label == "me unknown" { return "Unattributed microphone speech" }
         return "Speaker \((labels.firstIndex(of: label) ?? 0) + 1)" + (label == "me" ? " (you)" : "")
     }
     func speakerName(for segment: Segment) -> String { attribution(for: segment)?.name ?? unknownSpeakerName(segment.speaker) }
     var displaySpeakerNames: [String: String] {
         let labels = Array(Set((cleanupOriginalSegments ?? []).map(\.speaker) + segments.map(\.speaker))).sorted()
-        let unknown = Dictionary(uniqueKeysWithValues: labels.enumerated().map { ($0.element, "Speaker \($0.offset + 1)" + ($0.element == "me" ? " (you)" : "")) })
+        let unknown = Dictionary(uniqueKeysWithValues: labels.enumerated().map { ($0.element, ($0.element == "me unknown" ? "Unattributed microphone speech" : "Speaker \($0.offset + 1)" + ($0.element == "me" ? " (you)" : ""))) })
         return Dictionary(uniqueKeysWithValues: segments.map { ($0.id, attribution(for: $0)?.name ?? unknown[$0.speaker] ?? "Unknown speaker") })
     }
     var undetectedInvitees: [InvitedSpeakerStatus] {
@@ -148,7 +149,7 @@ public extension Meeting {
     var reconciledSpeakers: [ReconciledSpeaker] {
         let labels = Array(Set((cleanupOriginalSegments ?? []).map(\.speaker) + segments.map(\.speaker))).sorted()
         let unknown = Dictionary(uniqueKeysWithValues: labels.enumerated().map {
-            ($0.element, "Speaker \($0.offset + 1)" + ($0.element == "me" ? " (you)" : ""))
+            ($0.element, ($0.element == "me unknown" ? "Unattributed microphone speech" : "Speaker \($0.offset + 1)" + ($0.element == "me" ? " (you)" : "")))
         })
         var seen = Set<String>()
         let people = (participantContext ?? []).filter { seen.insert($0.company + ":" + $0.employeeID).inserted }
@@ -198,7 +199,7 @@ public extension Meeting {
                 }
                 continue
             }
-            var sources = [sourceMetadata?["documentSHA256"] == nil ? "Voice detected" : "Document transcript"]
+            var sources = [sourceMetadata?["documentSHA256"] != nil ? "Document transcript" : segment.speaker == "me unknown" ? "Unattributed speech" : "Voice detected"]
             if let attribution {
                 if person.map({ participants.contains($0.invitee) }) == true || participants.contains(where: { NameAliases.mentions(name, in: $0) }) { sources.append("Meeting invite") }
                 if person != nil { sources.append("BambooHR") }

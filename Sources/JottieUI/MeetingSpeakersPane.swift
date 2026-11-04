@@ -9,7 +9,7 @@ import JottieLibrary
     @ViewState private var correcting: ReconciledSpeaker?
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
-            if model.savedSettings.voiceLearningEnabled {
+            if model.advancedSettings && model.savedSettings.voiceLearningEnabled {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(model.voiceStatus)
@@ -39,11 +39,14 @@ import JottieLibrary
                            let match = suggestion.voiceMatch {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("Voice suggestion: \(suggestion.name)").font(JottieStyle.font(12, .medium))
-                                Text("Similarity \(String(format: "%.2f", match.similarity)) · \(match.sampleCount) independent windows · review with Correct assignment")
-                                    .font(JottieStyle.font(11)).foregroundStyle(JottieStyle.muted)
+                                if model.advancedSettings {
+                                    Text("Similarity \(String(format: "%.2f", match.similarity)) · \(match.sampleCount) independent windows")
+                                        .font(JottieStyle.font(11)).foregroundStyle(JottieStyle.muted)
+                                }
+                                Text("Review with Correct assignment").font(JottieStyle.font(11)).foregroundStyle(JottieStyle.muted)
                             }
                         }
-                        if let match = row.segmentIDs.compactMap({ meeting.speakerAttributions?[$0]?.voiceMatch }).first {
+                        if model.advancedSettings, let match = row.segmentIDs.compactMap({ meeting.speakerAttributions?[$0]?.voiceMatch }).first {
                             Text("Local voice match · similarity \(String(format: "%.2f", match.similarity)) · \(match.sampleCount) independent windows")
                                 .font(JottieStyle.font(11)).foregroundStyle(JottieStyle.muted)
                         }
@@ -78,8 +81,11 @@ import JottieLibrary
             JottieSection(title: "Meeting sources", icon: "calendar") {
                 Text(meeting.calendarContext.map { "\($0.title) · \($0.calendarTitle)" } ?? "No meeting invitation attached.")
                     .font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted)
-                HStack {
+                FlowLayout {
                     Button("Find / change calendar event") { choosingCalendar = true }
+                    if meeting.calendarContext != nil {
+                        Button("Remove calendar match") { Task { await model.attachCalendar(nil, to: meeting) } }
+                    }
                     Button("Refresh directory matches") { Task { await model.refreshPeople(for: meeting) } }.disabled(meeting.directoryIdentityCandidates.isEmpty)
                 }.buttonStyle(JottieButtonStyle(kind: .outline, compact: true))
                 if meeting.summaryNeedsIdentityRefresh {

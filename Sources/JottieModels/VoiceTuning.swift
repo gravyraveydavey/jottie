@@ -11,10 +11,10 @@ public struct VoiceTuning: Codable, Sendable, Equatable {
     public var minimumEmbeddingSpeechSeconds = 1.0
     public init() {}
     public var isValid: Bool {
-        matchSimilarity.isFinite && (0.4...0.95).contains(matchSimilarity)
-            && matchMargin.isFinite && (0...0.5).contains(matchMargin)
+        matchSimilarity.isFinite && (0...1).contains(matchSimilarity)
+            && matchMargin.isFinite && (0...1).contains(matchMargin)
             && (1...8).contains(minimumMatchingWindows)
-            && clusteringSimilarity.isFinite && (0.2...0.95).contains(clusteringSimilarity)
+            && clusteringSimilarity.isFinite && (0...1).contains(clusteringSimilarity)
             && (0...12).contains(knownSpeakersPerTrack) && (0...12).contains(maximumSpeakersPerTrack)
             && minimumEmbeddingSpeechSeconds.isFinite && (1...5).contains(minimumEmbeddingSpeechSeconds)
     }

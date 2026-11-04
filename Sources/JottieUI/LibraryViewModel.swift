@@ -84,6 +84,12 @@ public struct CaptureQueueItem: Identifiable, Equatable, Sendable {
     @Published public var appearance = UserDefaults.standard.string(forKey: "jottie.appearance") ?? "system" {
         didSet { if persistPresentation { UserDefaults.standard.set(appearance, forKey: "jottie.appearance") } }
     }
+    @Published public var advancedSettings = false {
+        didSet { if persistPresentation { UserDefaults.standard.set(advancedSettings, forKey: "jottie.advancedSettings") } }
+    }
+    @Published public var recordingSettingsSection = "Capture"
+    @Published public var integrationSettingsSection = "Calendars"
+    @Published public var summarySettingsSection = "Automation"
     @Published public var savedSettings = LibrarySettings()
     @Published public var location = "all"
     @Published public var settingsTab = "General"
@@ -204,6 +210,7 @@ public struct CaptureQueueItem: Identifiable, Equatable, Sendable {
         self.store = store; self.coordinator = coordinator; self.account = account; self.publisher = publisher
         self.cleanupRunner = cleanupRunner
         persistPresentation = store.root.standardizedFileURL == LibraryStore.defaultRoot.standardizedFileURL
+        if persistPresentation { advancedSettings = UserDefaults.standard.bool(forKey: "jottie.advancedSettings") }
     }
     public var selectedFolder: Folder? { folders.first { $0.id.uuidString == location } }
     public var selectedMeeting: Meeting? {
@@ -524,7 +531,7 @@ public struct CaptureQueueItem: Identifiable, Equatable, Sendable {
             if showMessage { message = "Matched \(matches.count) of \(current.directoryIdentityCandidates.count) invitation/transcript identities against the local directory." }
         } catch { message = error.localizedDescription }
     }
-    public func attachCalendar(_ event: CalendarEventContext, to meeting: Meeting) async {
+    public func attachCalendar(_ event: CalendarEventContext?, to meeting: Meeting) async {
         do {
             try await store.setCalendarContext(event, meetingID: meeting.id)
             await reload()

@@ -14,11 +14,16 @@ import JottieKnowledge
             VStack(alignment: .leading, spacing: 30) {
                 VStack(alignment: .leading, spacing: 12) {
                     Image(systemName: "slider.horizontal.3").font(.system(size: 24)).foregroundStyle(JottieStyle.accent)
-                    Text("Settings").font(JottieStyle.font(30, .semibold)).tracking(-0.7)
+                    HStack {
+                        Text("Settings").font(JottieStyle.font(30, .semibold)).tracking(-0.7)
+                        Spacer()
+                        Toggle("Advanced", isOn: $model.advancedSettings).toggleStyle(.switch).font(JottieStyle.font(12))
+                            .help("Show detailed tuning, custom prompts, automation and voice diagnostics across Jottie. Hidden values are preserved.")
+                    }
                     Text("Shape how Jottie brings your conversations together.").foregroundStyle(JottieStyle.muted)
                 }
                 HStack(spacing: 12) {
-                    ForEach([("General", "gearshape"), ("Summaries", "text.alignleft"), ("Recording", "mic"), ("Integrations", "link"), ("Microsoft", "cloud"), ("MCP", "network")], id: \.0) { name, icon in
+                    ForEach([("General", "gearshape"), ("Summaries", "text.alignleft"), ("Recording", "mic"), ("Integrations", "link")], id: \.0) { name, icon in
                         DocumentTab(title: name, icon: icon, selected: model.settingsTab == name) { model.settingsTab = name }
                     }
                 }
@@ -26,13 +31,9 @@ import JottieKnowledge
                     switch model.settingsTab {
                     case "Summaries": prompts
                     case "General": general
-                    case "Recording":
-                        if let controller = model.captureSettings { CaptureSettingsPane(controller: controller, people: model.directoryPeople) }
-                        else { Text("Recording controls are available in the full Jottie app. This library-only window does not run the capture engine.").foregroundStyle(JottieStyle.muted) }
-                    case "Integrations":
-                        VStack(alignment: .leading, spacing: 32) { calendars; JottieRule(); bamboo; JottieRule(); voiceLearning; DirectoryAliasSettings(model: model) }
-                    case "Microsoft": microsoft
-                    default: mcp
+                    case "Recording": recording
+                    case "Integrations": integrations
+                    default: general
                     }
                 }.task { await model.loadDirectoryPeople(); model.captureSettings?.refresh() }
                 JottieRule()
@@ -51,6 +52,15 @@ import JottieKnowledge
             .task { if model.codexStatus == nil { await model.checkCodex() }; await model.refreshBambooStatus() }
     }
     private var prompts: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            if model.advancedSettings {
+                subsections(["Automation", "Prompts"], selection: $model.summarySettingsSection)
+            }
+            if model.advancedSettings && model.summarySettingsSection == "Prompts" { promptSettings }
+            else { automation }
+        }
+    }
+    private var promptSettings: some View {
         VStack(alignment: .leading, spacing: 24) {
             JottieSection(title: "Summary prompts") {
                 description("When a prompt changes, existing summaries can be updated explicitly. Regenerate one summary or use Update summaries to refresh the library.")
@@ -93,33 +103,19 @@ import JottieKnowledge
     }
     private var general: some View {
         VStack(alignment: .leading, spacing: 24) {
-            if let controller = model.captureSettings,
-               let field = controller.sections.flatMap(\.fields).first(where: { $0.id == "user_name" }) {
-                JottieSection(title: "Your speaker identity", icon: "person.crop.circle") {
-                    CaptureSettingRow(field: field, controller: controller, people: model.directoryPeople)
-                    description("Used for your microphone track on future recordings. Choose a BambooHR suggestion and Apply, or enter your preferred name.")
-                }
+            JottieSection(title: "Appearance") {
+                Picker("Theme", selection: $model.appearance) { Text("System").tag("system"); Text("Light").tag("light"); Text("Dark").tag("dark") }.frame(maxWidth: 300)
             }
+            if let controller = model.captureSettings {
+                CaptureSettingsPane(controller: controller, people: model.directoryPeople, area: .general, advanced: model.advancedSettings)
+            }
+        }
+    }
+    private var automation: some View {
+        VStack(alignment: .leading, spacing: 24) {
             JottieSection(title: "Codex summaries and organisation") {
                 Toggle("Automatically analyse meetings with my signed-in Codex CLI", isOn: $model.settings.analysisEnabled).toggleStyle(.switch)
                 description("Transcription stays on this Mac. Codex receives meeting text using your subscription; usage limits apply. There is no API fallback.")
-                field("Codex executable", hint: "Automatic discovery if blank") {
-                    TextField("Automatic", text: $model.settings.codexPath)
-                        .onChange(of: model.settings.codexPath) { _, _ in model.codexStatus = nil; model.codexTestMessage = nil }
-                }
-                if let status = model.codexStatus {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label(status.message, systemImage: status.ready ? "checkmark.circle" : "exclamationmark.triangle").foregroundStyle(status.ready ? Color.green : .orange)
-                        if let version = status.version { description(version) }
-                        if !status.executable.isEmpty { Text(status.executable).font(JottieStyle.mono(10)).foregroundStyle(JottieStyle.muted).textSelection(.enabled) }
-                    }.padding(16).frame(maxWidth: .infinity, alignment: .leading).background(JottieStyle.surface, in: RoundedRectangle(cornerRadius: 10))
-                }
-                HStack {
-                    Button(model.checkingCodex ? "Checking…" : "Check Codex") { Task { await model.checkCodex() } }.disabled(model.checkingCodex || model.testingCodex)
-                    Button(model.testingCodex ? "Testing…" : "Test connection") { Task { await model.testCodex() } }.disabled(model.checkingCodex || model.testingCodex)
-                }
-                description("Check verifies installation and sign-in. Test submits a small invented prompt using your Codex allowance.")
-                if let message = model.codexTestMessage { description(message) }
                 HStack(alignment: .top, spacing: 24) {
                     field("Model") {
                         Picker("Model", selection: $model.settings.codexModel) {
@@ -134,29 +130,87 @@ import JottieKnowledge
                         }.labelsHidden()
                     }
                 }
-                field("Model ID", hint: "Optional: enter a model absent from the CLI catalog.") {
-                    TextField("CLI default", text: $model.settings.codexModel)
-                        .onChange(of: model.settings.codexModel) { _, _ in if !model.codexEfforts.contains(model.settings.codexEffort) { model.settings.codexEffort = "" } }
+                if model.advancedSettings {
+                    field("Model ID", hint: "Optional: enter a model absent from the CLI catalog.") {
+                        TextField("CLI default", text: $model.settings.codexModel)
+                            .onChange(of: model.settings.codexModel) { _, _ in if !model.codexEfforts.contains(model.settings.codexEffort) { model.settings.codexEffort = "" } }
+                    }
                 }
                 description("The same choices apply to meeting summaries, tags, folder context and connection tests. Model access depends on your account.")
-                Stepper("Folder context check: \(model.settings.refreshMinutes) minutes", value: $model.settings.refreshMinutes, in: 1...10080)
+                if model.advancedSettings { Stepper("Folder context check: \(model.settings.refreshMinutes) minutes", value: $model.settings.refreshMinutes, in: 1...10080) }
+                HStack {
+                    Button("Update summaries") { Task { await model.updateSummaries() } }
+                        .disabled(model.settingsDirty || model.working)
+                    description("\(model.updateCount) summaries are missing or use earlier inputs.")
+                }
                 Button("Update folder contexts now") { Task { if await model.saveSettings(processPending: false) { await model.updateNow() } } }.disabled(model.working)
             }
-            JottieRule()
-            JottieSection(title: "Capture") {
-                Toggle("Record meetings automatically", isOn: Binding(get: { model.capture.autoRecord }, set: { _ in model.onAutoRecord?() })).toggleStyle(.switch).disabled(model.onAutoRecord == nil)
-                Toggle("Show live transcript while recording", isOn: Binding(get: { model.capture.liveEnabled }, set: { model.onLive?($0) })).toggleStyle(.switch).disabled(model.onLive == nil)
-                description(model.capture.autoDecision ?? "Audio is temporary and deleted after durable local transcription. Failed sessions keep their audio for recovery.")
-                Button("Recording and permissions") { model.settingsTab = "Recording" }
+        }
+    }
+    private var codex: some View {
+        JottieSection(title: "Codex connection", icon: "terminal") {
+            if model.advancedSettings {
+                field("Codex executable", hint: "Automatic discovery if blank") {
+                    TextField("Automatic", text: $model.settings.codexPath)
+                        .onChange(of: model.settings.codexPath) { _, _ in model.codexStatus = nil; model.codexTestMessage = nil }
+                }
             }
-            JottieSection(title: "Appearance") {
-                Picker("Theme", selection: $model.appearance) { Text("System").tag("system"); Text("Light").tag("light"); Text("Dark").tag("dark") }.frame(maxWidth: 300)
+            if let status = model.codexStatus {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(status.message, systemImage: status.ready ? "checkmark.circle" : "exclamationmark.triangle").foregroundStyle(status.ready ? Color.green : .orange)
+                    if let version = status.version { description(version) }
+                    if !status.executable.isEmpty { Text(status.executable).font(JottieStyle.mono(10)).foregroundStyle(JottieStyle.muted).textSelection(.enabled) }
+                }.padding(16).frame(maxWidth: .infinity, alignment: .leading).background(JottieStyle.surface, in: RoundedRectangle(cornerRadius: 10))
+            }
+            HStack {
+                Button(model.checkingCodex ? "Checking…" : "Check Codex") { Task { await model.checkCodex() } }.disabled(model.checkingCodex || model.testingCodex)
+                Button(model.testingCodex ? "Testing…" : "Test connection") { Task { await model.testCodex() } }.disabled(model.checkingCodex || model.testingCodex)
+            }
+            description("Check verifies installation and sign-in. Test submits a small invented prompt using your Codex allowance.")
+            if let message = model.codexTestMessage { description(message) }
+            description("Summary automation and model choices are in Summaries.")
+        }
+    }
+    private func subsections(_ titles: [String], selection: Binding<String>) -> some View {
+        Picker("Section", selection: selection) { ForEach(titles, id: \.self) { Text($0).tag($0) } }
+            .pickerStyle(.segmented).labelsHidden()
+    }
+    private var recording: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            subsections(["Capture", "Transcription", "Voice learning", "Models"], selection: $model.recordingSettingsSection)
+            if model.recordingSettingsSection == "Voice learning" { voiceLearning }
+            else if let controller = model.captureSettings {
+                if model.recordingSettingsSection == "Capture" {
+                    CaptureSettingsPane(controller: controller, people: model.directoryPeople, area: .recording, advanced: model.advancedSettings)
+                } else if model.recordingSettingsSection == "Models" {
+                    CaptureSettingsPane(controller: controller, area: .transcription, advanced: model.advancedSettings, modelsOnly: true)
+                } else {
+                    CaptureSettingsPane(controller: controller, area: .transcription, advanced: model.advancedSettings)
+                }
+            } else { description("Capture controls are available in the full Jottie app.") }
+        }
+    }
+    private var integrations: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            subsections(["Calendars", "BambooHR", "Codex", "Microsoft", "MCP"], selection: $model.integrationSettingsSection)
+            switch model.integrationSettingsSection {
+            case "BambooHR":
+                bamboo
+                if model.advancedSettings { DirectoryAliasSettings(model: model) }
+            case "Codex": codex
+            case "Microsoft": microsoft
+            case "MCP": mcp
+            default:
+                calendars
+                if let controller = model.captureSettings {
+                    CaptureSettingsPane(controller: controller, area: .calendar, advanced: model.advancedSettings)
+                }
             }
         }
     }
     private var calendars: some View {
         JottieSection(title: "Calendar context", icon: "calendar") {
-            description("Choose calendars for meeting titles and speaker context. Attendees are identity candidates, not confirmed speakers. Calendar-triggered recording is configured separately in Recording settings.")
+            description("Choose calendars for meeting titles and speaker context. Attendees are identity candidates, not confirmed speakers. Calendar access, selection and calendar-triggered recording are configured together here.")
             Button("Load calendars / request access") {
                 Task { do { model.calendars = try await EventKitCalendars().choices() } catch { model.message = error.localizedDescription } }
             }
@@ -167,7 +221,7 @@ import JottieKnowledge
             }
             let selected = model.calendars.filter { model.settings.selectedCalendarIDs.contains($0.id) }
             description(selected.isEmpty ? "No available calendars selected. Choose the calendar containing your actual meeting invitations, then Save settings." : "Reading: " + selected.map(\.title).joined(separator: "; "))
-            description("A local ‘Default — Calendar’ may be empty even when Outlook has meetings. Select the relevant Exchange calendar. Selection changes apply after saving (enable Read the calendar in Recording and relaunch if it was disabled); use a meeting's Speakers tab to attach an earlier event and refresh directory matches.")
+            description("A local ‘Default — Calendar’ may be empty even when Outlook has meetings. Select the relevant Exchange calendar. Selection changes apply after saving (enable Read the calendar below and relaunch if it was disabled); use a meeting's Speakers tab to attach an earlier event and refresh directory matches.")
         }.task {
             if model.calendars.isEmpty && EKEventStore.authorizationStatus(for: .event) == .fullAccess {
                 do { model.calendars = try await EventKitCalendars().choices() }
@@ -204,8 +258,8 @@ import JottieKnowledge
             Toggle("Automatically assign strong voice matches", isOn: $model.settings.voiceAutoAssign)
                 .toggleStyle(.switch).disabled(!model.settings.voiceLearningEnabled)
             description("Suggestions are the default. Automatic assignment uses experimental similarity thresholds; scores are not probabilities. Only manual directory assignments teach a voice.")
-            VoiceTuningControls(tuning: $model.settings.voiceTuning)
-            description(model.voiceStatus)
+            if model.advancedSettings { VoiceTuningControls(tuning: $model.settings.voiceTuning, advanced: true) }
+            if model.advancedSettings { description(model.voiceStatus) }
             HStack {
                 Button(model.updatingVoices ? "Re-evaluating…" : "Re-evaluate saved voices") { Task { await model.reevaluateVoices() } }
                     .disabled(model.updatingVoices || model.settingsDirty)

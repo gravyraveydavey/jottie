@@ -126,7 +126,7 @@ import JottieUI
             case "calendar":
                 let result = await SetupPermissions.requestCalendar(); calendarGrant = result
                 if result == .denied { SetupPermissions.openSettings(.calendar) }
-                else if result == .granted { controller.message = "Calendar access allowed. Select calendars in Integrations and relaunch Jottie to enable capture context." }
+                else if result == .granted { controller.message = "Calendar access allowed. Select calendars in Integrations → Calendars and relaunch Jottie to enable capture context." }
             case "audio":
                 let result = await SetupPermissions.testSystemAudio()
                 if result == .heard { SetupState.rememberSystemAudioHeard(); controller.message = "System audio test succeeded." }

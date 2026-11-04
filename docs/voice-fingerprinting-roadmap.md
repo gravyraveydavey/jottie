@@ -71,7 +71,7 @@ Individual-person forgetting controls, richer rejected-match diagnostics and eva
 
 ### Pilot bundle
 
-The branch builds an arm64 development app at `.build/.voice-fingerprinting/Jottie.app`. Packaging verifies its signature, embedded-framework startup and macOS 14.2 compatibility. Quit the running Jottie before opening this pilot bundle for recording tests. Under Settings → Integrations, enable Remember voices on this Mac and save; enable Automatically assign strong voice matches as well when testing direct assignment rather than suggestions. Under Recording, use Parakeet and enable/download Local speaker separation. Start recording only after these settings are saved.
+The branch builds an arm64 development app at `.build/.voice-fingerprinting/Jottie.app`. Packaging verifies its signature, embedded-framework startup and macOS 14.2 compatibility. Quit the running Jottie before opening this pilot bundle for recording tests. Under Settings → Recording → Voice learning, enable Remember voices on this Mac and save; enable Automatically assign strong voice matches as well when testing direct assignment rather than suggestions. Under Recording, use Parakeet and enable/download Local speaker separation. Start recording only after these settings are saved.
 
 This is an ad-hoc signed local development build, not a Windows build or a published/notarized release. The human acceptance sequence above remains outstanding.
 
@@ -90,3 +90,16 @@ A synthetic regression reproduced the historical failure with one identical voic
 Verification: the original synthetic historical-fragmentation test failed before the fix and passed afterwards. The full macOS run passed 791 capture tests and 134 library tests, including migration to the 70/100 default, threshold replay on retained historical evidence, cross-track isolation, partial coverage and independent-window selection. The installed-model run used locally synthesized invented speech and verified that Known voices per audio track = 1 produced one acoustic speaker. New capture-tuning snapshots survived the transcription/import boundary.
 
 Native renders of the tuning controls, applied matches and rejection diagnostics were inspected. A final focused three-test run passed after improving diagnostic alignment. Interactive clicking remains unverified: Computer Use could not attach to the XCTest host and later timed out opening an isolated QA host. The temporary host was removed; no real recordings, identities or settings were changed during development tests. Model accuracy on the user's next recordings still needs a new human comparison.
+
+
+## Settings cleanup and statement-edge follow-up — 4 November 2026
+
+The user reported that clustering at 40/100 still produced three rows in solo tests, with opening/closing speech often missing. [Settings layout](settings-layout.md) records the four-page grouping, subsections, shared Advanced preference and calendar removal route. Voice learning moved into Recording; numeric 0–100 similarity controls replace sliders. Raw voice-match diagnostics are hidden in Basic mode.
+
+Calendar removal persists an explicit null override, clears invitation/directory context and dismisses an exact invitation-derived title without rewriting analysis history or manual voice corrections. Regression fixtures cover rescans and changed source transcripts.
+
+A minimized differential replay of the actual word-alignment function uses one acoustic interval and short outer words whose timings extend 120 ms beyond it. The previous function yields unknown/known/unknown rows; bounded word-edge recovery yields one row. Negative fixtures retain unknown labels for competing turns, long gaps, larger offsets and coarse segments. This establishes a separate timing failure mode; it does not prove that all surplus clusters in the user's recordings have this cause. Real human accuracy and the effect of prosody still require a fresh controlled recording.
+
+Verification: the complete macOS run passed 792 capture tests and 138 library tests. This included LocalVQE, installed speaker models on locally synthesized invented speech, calendar removal across unchanged/changed rescans, preservation of manual names/history, settings routing and native Basic/Advanced renders. After tightening boundary recovery to reject small interior speech islands and wrapping calendar actions, the final focused run passed nine capture/separation/configuration checks and all 138 library checks. The 0 and 100 clustering endpoints both passed the pinned SDK configuration validator. Packaging-script checks passed 30 tests with two optional skips.
+
+Native renders of General, Calendars, Basic/Advanced voice learning and speaker rows were inspected. Interactive clicking and live recording/TCC flows were not exercised in this pass. No real recordings, speaker identities, credentials or user settings were used or changed during automated validation.

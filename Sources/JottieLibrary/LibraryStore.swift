@@ -479,11 +479,19 @@ public actor LibraryStore: MeetingRepository {
             try commit(value)
         }
     }
-    public func setCalendarContext(_ context: CalendarEventContext, meetingID: UUID) throws {
+    public func setCalendarContext(_ context: CalendarEventContext?, meetingID: UUID) throws {
         try locked {
             var meeting = try self.meeting(meetingID)
+            if context == nil, let previous = meeting.calendarContext {
+                let fallback = "Recording · " + meeting.startedAt.formatted(date: .abbreviated, time: .shortened)
+                // Keep analysis revisions intact; replace only the exact invitation-derived title.
+                if meeting.dismissedCalendarTitle == nil || meeting.analysis?.analysis.title == previous.title {
+                    meeting.dismissedCalendarTitle = previous.title
+                }
+                if meeting.title == previous.title { meeting.title = fallback }
+            }
             meeting.calendarContext = context; meeting.calendarContextManuallySet = true
-            meeting.participants = context.invitees; meeting.participantContext = nil
+            meeting.participants = context?.invitees ?? []; meeting.participantContext = nil
             try commit(meeting)
         }
     }

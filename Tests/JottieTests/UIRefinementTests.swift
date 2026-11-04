@@ -100,3 +100,86 @@ private func identityNoticeFixture() -> Meeting {
     person.jobTitle = "Director"; meeting.participantContext = [person]
     #expect(meeting.summaryIdentityRevision != revision)
 }
+
+@Test func removingCalendarIsDurableAndKeepsManualNamesAndAnalysisHistory() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let capture = root.appendingPathComponent("capture")
+    try LibraryStore.directory(capture)
+    let event = CalendarEventContext(id: "wrong", calendarID: "work", calendarTitle: "Work", title: "Wrong invitation",
+        start: Date(timeIntervalSince1970: 0), end: Date(timeIntervalSince1970: 3600), invitees: ["Absent Person"])
+    let meta: [String: Any] = ["started": "2026-11-04T09:00:00Z", "calendar": ["title": event.title, "attendees": event.invitees,
+        "snapshot": try JSONSerialization.jsonObject(with: Codec.encode(event))]]
+    try JSONSerialization.data(withJSONObject: meta).write(to: capture.appendingPathComponent("meta.json"))
+    try Data(#"{"segments":[{"speaker":"me","start_ms":0,"end_ms":1000,"text":"Hello."}]}"#.utf8).write(to: capture.appendingPathComponent("transcript.json"))
+    let store = try LibraryStore(root: root.appendingPathComponent("library"))
+    let first = try await store.importAmanu(capture)
+    #expect(first.calendarContext == event)
+    try await store.setSpeaker("me", name: "Actual Speaker", meetingID: first.id)
+    let analysis = AnalysisRevision(transcriptRevision: first.transcriptRevision, promptRevision: "test",
+        analysis: Analysis(title: event.title, summary: "Hello.", summaryEvidence: [Evidence(segmentID: "s1", quote: "Hello.")]))
+    try await store.apply(analysis, to: first.id)
+    let persistedAnalysis = try await store.meeting(first.id).analysis
+    try await store.setCalendarContext(nil, meetingID: first.id)
+    let cleared = try await store.meeting(first.id)
+    #expect(cleared.calendarContext == nil && cleared.calendarContextManuallySet == true)
+    #expect(cleared.participants.isEmpty && cleared.participantContext == nil)
+    #expect(cleared.displayTitle.hasPrefix("Recording · "))
+    #expect(cleared.analysis == persistedAnalysis && cleared.speakerNames["me"] == "Actual Speaker")
+    #expect(cleared.summaryNeedsIdentityRefresh)
+    let rescanned = try await store.importAmanu(capture)
+    #expect(rescanned.calendarContext == nil && rescanned.participants.isEmpty && rescanned.displayTitle == cleared.displayTitle)
+    // Removing a different later invitation must not revive the first dismissed title.
+    var another = event; another.id = "another"; another.title = "Another invitation"
+    try await store.setCalendarContext(another, meetingID: first.id)
+    try await store.setCalendarContext(nil, meetingID: first.id)
+    #expect(try await store.meeting(first.id).displayTitle == cleared.displayTitle)
+    // A changed source transcript must also preserve the explicit null override.
+    try Data(#"{"segments":[{"speaker":"me","start_ms":0,"end_ms":2000,"text":"Hello again."}]}"#.utf8).write(to: capture.appendingPathComponent("transcript.json"))
+    let changed = try await store.importAmanu(capture)
+    #expect(changed.calendarContext == nil && changed.participants.isEmpty)
+    try await store.setCalendarContext(event, meetingID: first.id)
+    #expect(try await store.meeting(first.id).calendarContext == event)
+}
+
+@Test func removingCalendarPreservesIndependentTitlesAndDoesNotCountUnknownAsDetectedVoice() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let store = try LibraryStore(root: root)
+    let meeting = Meeting(sourceID: "synthetic-title", title: "My test recording", segments: [Segment(id: "s1", speaker: "me unknown", text: "Hello")])
+    try await store.save(meeting)
+    let event = CalendarEventContext(id: "wrong", calendarID: "work", calendarTitle: "Work", title: "Another meeting", start: Date(), end: Date(), invitees: [])
+    try await store.setCalendarContext(event, meetingID: meeting.id)
+    try await store.setCalendarContext(nil, meetingID: meeting.id)
+    let result = try await store.meeting(meeting.id)
+    #expect(result.displayTitle == "My test recording")
+    #expect(result.reconciledSpeakers.first?.name == "Unattributed microphone speech")
+    #expect(result.reconciledSpeakers.first?.sources == ["Unattributed speech"])
+}
+
+@Test func settingsRouteRelatedControlsTogetherUsingStableKeys() {
+    for key in ["calendar", "auto_record.calendar"] { #expect(CaptureSettingsArea.area(for: key) == .calendar) }
+    for key in ["user_name", "interface_language", "dock_icon", "menu_bar_icon", "window", "on_stop"] {
+        #expect(CaptureSettingsArea.area(for: key) == .general)
+    }
+    for key in ["transcription.engine", "transcription.language", "live_transcription.enabled", "speaker_names.enabled"] {
+        #expect(CaptureSettingsArea.area(for: key) == .transcription)
+    }
+    #expect(CaptureSettingsArea.area(for: "auto_record.enabled") == .recording)
+    #expect(CaptureSettingsArea.isAdvanced("auto_record.stop_delay_seconds"))
+    #expect(!CaptureSettingsArea.isAdvanced("auto_record.enabled"))
+    #expect(CaptureSettingsArea.calendar.includesAction("calendar"))
+    #expect(!CaptureSettingsArea.recording.includesAction("calendar"))
+}
+
+@Test func similaritySettingsAcceptTheFullHundredPointScaleButRejectOutsideIt() {
+    var tuning = VoiceTuning()
+    tuning.matchSimilarity = 0; tuning.clusteringSimilarity = 0; tuning.matchMargin = 0
+    #expect(tuning.isValid)
+    tuning.matchSimilarity = 1; tuning.clusteringSimilarity = 1; tuning.matchMargin = 1
+    #expect(tuning.isValid)
+    tuning.matchSimilarity = 1.01
+    #expect(!tuning.isValid)
+    tuning.matchSimilarity = 0.7; tuning.clusteringSimilarity = -0.01
+    #expect(!tuning.isValid)
+}

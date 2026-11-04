@@ -87,3 +87,13 @@ func voiceEmbeddingExtractionWithInstalledModelsAndSyntheticSpeech() async throw
     #expect(result.samples.allSatisfy { $0.isValid })
     #expect(result.modelID.count == 64)
 }
+
+
+@Test func hundredPointSimilarityEndpointsProduceValidDiarizerConfigurations() throws {
+    for score in [0.0, 0.4, 0.7, 1.0] {
+        var tuning = VoiceTuning(); tuning.clusteringSimilarity = score
+        let config = LocalSpeakerSeparation.configuration(tuning: tuning, capture: true)
+        try config.validate()
+        #expect(config.clustering.threshold > 0 && config.clustering.threshold <= 1)
+    }
+}

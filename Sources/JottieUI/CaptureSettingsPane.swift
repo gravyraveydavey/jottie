@@ -48,25 +48,45 @@ public struct CaptureModelItem: Identifiable {
 @MainActor struct CaptureSettingsPane: View {
     @ObservedObject var controller: CaptureSettingsController
     var people: [DirectoryPerson] = []
+    var area: CaptureSettingsArea = .recording
+    var advanced = false
+    var modelsOnly = false
     @ViewState private var deleting: CaptureModelItem?
+    private var actions: [CaptureSettingsAction] { modelsOnly ? [] : controller.actions.filter { area.includesAction($0.id) } }
+    private var sections: [CaptureSettingsSection] {
+        guard !modelsOnly else { return [] }
+        return controller.sections.compactMap { section in
+            let fields = section.fields.filter {
+                CaptureSettingsArea.area(for: $0.id) == area && (advanced || !CaptureSettingsArea.isAdvanced($0.id))
+            }
+            let title: String
+            if area == .calendar { title = "Calendar behaviour" }
+            else if area == .general && fields.contains(where: { $0.id == "user_name" }) { title = "Your speaker identity" }
+            else if area == .transcription && fields.contains(where: { $0.id.hasPrefix("speaker_names.") }) { title = "Speaker attribution" }
+            else { title = section.title }
+            return fields.isEmpty ? nil : CaptureSettingsSection(title: title, fields: fields)
+        }
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
-            JottieSection(title: "Permissions and startup", icon: "lock.shield") {
-                ForEach(controller.actions) { action in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(action.title).font(JottieStyle.font(13, .medium))
-                            Text(action.status).font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted)
-                        }
-                        Spacer()
-                        Button(action.id == "audio" ? "Play test tone" : action.id == "login" ? "Enable" : action.id == "unlogin" ? "Disable" : "Manage access") {
-                            Task { await controller.perform(action.id) }
-                        }.disabled(controller.busy)
-                    }.padding(.vertical, 5)
+            if !actions.isEmpty {
+                JottieSection(title: area == .general ? "Startup" : "Permissions", icon: "lock.shield") {
+                    ForEach(actions) { action in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(action.title).font(JottieStyle.font(13, .medium))
+                                Text(action.status).font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted)
+                            }
+                            Spacer()
+                            Button(action.id == "audio" ? "Play test tone" : action.id == "login" ? "Enable" : action.id == "unlogin" ? "Disable" : "Manage access") {
+                                Task { await controller.perform(action.id) }
+                            }.disabled(controller.busy)
+                        }.padding(.vertical, 5)
+                    }
                 }
-                if let message = controller.message { Text(message).font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted).textSelection(.enabled) }
             }
-            if !controller.models.isEmpty {
+            if let message = controller.message { Text(message).font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted).textSelection(.enabled) }
+            if modelsOnly && !controller.models.isEmpty {
                 JottieSection(title: "Local speech models", icon: "internaldrive") {
                     ForEach(controller.models) { item in
                         HStack {
@@ -85,16 +105,22 @@ public struct CaptureModelItem: Identifiable {
                     if controller.busy { ProgressView().controlSize(.small) }
                 }
             }
-            ForEach(controller.sections) { section in
+            ForEach(sections) { section in
                 JottieSection(title: section.title) {
                     ForEach(section.fields) { field in CaptureSettingRow(field: field, controller: controller, people: people).id(field.id) }
                 }
                 JottieRule()
             }
-            Button { Task { await controller.perform("choose-folder") } } label: { Label("Choose capture folder…", systemImage: "folder") }
-            Button { Task { await controller.perform("reveal") } } label: { Label("Reveal capture configuration", systemImage: "doc.text") }
-            Text("Capture controls save individually and apply immediately unless marked ‘Restart required’. Audio is removed after successful transcription; only local transcription engines are available.")
-                .font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted)
+            if area == .recording && advanced && !modelsOnly {
+                Button { Task { await controller.perform("choose-folder") } } label: { Label("Choose capture folder…", systemImage: "folder") }
+            }
+            if area == .general && advanced && !modelsOnly {
+                Button { Task { await controller.perform("reveal") } } label: { Label("Reveal capture configuration", systemImage: "doc.text") }
+            }
+            if !sections.isEmpty {
+                Text("Capture controls save individually and apply immediately unless marked ‘Restart required’. Audio is removed after successful transcription; only local transcription engines are available.")
+                    .font(JottieStyle.font(12)).foregroundStyle(JottieStyle.muted)
+            }
         }.onAppear { controller.refresh() }
             .alert(item: $deleting) { item in
                 Alert(title: Text("Delete \(item.title)?"), message: Text("The model files will be removed. Transcription or live features using this model will be disabled so it is not downloaded again automatically."),

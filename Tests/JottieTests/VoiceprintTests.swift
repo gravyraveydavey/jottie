@@ -262,10 +262,29 @@ private struct VoiceFixture {
         #expect(data.count > 10000)
         try data.write(to: output.appendingPathComponent(name + ".png"))
     }
+    let capture = CaptureSettingsController()
+    capture.sections = [CaptureSettingsSection(title: "Interface", fields: [
+        CaptureSetting(id: "dock_icon", title: "Show in the Dock", help: "Show Jottie in the Dock.", kind: .toggle, value: "true", placeholder: "", restart: false),
+        CaptureSetting(id: "user_name", title: "Your name", help: "Used for your microphone track.", kind: .text, value: "Alice Example", placeholder: "Name", restart: false)
+    ]), CaptureSettingsSection(title: "Calendar and naming", fields: [
+        CaptureSetting(id: "calendar", title: "Read the calendar", help: "Names recordings after matching invitations.", kind: .toggle, value: "true", placeholder: "", restart: true)
+    ])]
+    capture.actions = [CaptureSettingsAction(id: "login", title: "Start at login", status: "Off")]
+    model.captureSettings = capture
+    model.settingsTab = "General"
+    try render(LibrarySettingsView(model: model), name: "settings-general", height: 1000)
     model.settingsTab = "Integrations"
-    try render(LibrarySettingsView(model: model), name: "settings", height: 2200)
+    try render(LibrarySettingsView(model: model), name: "settings-calendars", height: 1100)
+    model.settingsTab = "Recording"; model.recordingSettingsSection = "Voice learning"
+    try render(LibrarySettingsView(model: model), name: "settings-voice-basic", height: 1000)
+    model.advancedSettings = true
+    try render(LibrarySettingsView(model: model), name: "settings-voice-advanced", height: 1400)
+    model.advancedSettings = false
     try render(VoiceTuningControls(tuning: Binding(get: { model.settings.voiceTuning }, set: { model.settings.voiceTuning = $0 })), name: "voice-tuning", height: 900)
     try render(InlineSpeakers(model: model, meeting: matched), name: "matched-speaker", height: 1200)
+    model.advancedSettings = true
+    try render(InlineSpeakers(model: model, meeting: matched), name: "matched-speaker-advanced", height: 1200)
+    model.advancedSettings = false
     var settings = try await f.store.settings(); settings.voiceAutoAssign = false; try await f.store.saveSettings(settings)
     await model.reload()
     let suggested = try #require(model.meetings.first { $0.id == query.id })

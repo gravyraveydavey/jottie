@@ -123,3 +123,31 @@ func validateDownloadedSpeakerModelAssets() async throws {
     #expect(models.isReady)
     _ = try models.load()
 }
+
+@Test func smallWordBoundaryOffsetsDoNotInventExtraMicrophoneVoices() {
+    // Both short outer words fail 65% overlap before bounded word-edge recovery.
+    let words = [TranscriptWord(start: 0, end: 0.2, text: "Hello"),
+                 TranscriptWord(start: 0.2, end: 1.8, text: "there"),
+                 TranscriptWord(start: 1.8, end: 2, text: "goodbye")]
+    let source = [TranscriptSegment(start: 0, end: 2, text: "Hello there goodbye", words: words)]
+    let intervals = [SpeakerInterval(speaker: "one", start: 0.12, end: 1.88)]
+    let result = LocalSpeakerSeparation.applying(intervals, to: source, side: "me")
+    #expect(result.map(\.speaker) == ["me"])
+    #expect(result.flatMap { $0.words ?? [] }.map(\.text) == words.map(\.text))
+    #expect(result.flatMap { $0.words ?? [] }.map(\.start) == words.map(\.start))
+    #expect(result.flatMap { $0.words ?? [] }.map(\.end) == words.map(\.end))
+    #expect(result.first?.start == 0 && result.last?.end == 2)
+    let coarse = LocalSpeakerSeparation.applying(intervals, to: [TranscriptSegment(start: 0, end: 0.2, text: "Hello")], side: "me")
+    #expect(coarse.first?.speaker == "me unknown")
+    let competing = intervals + [SpeakerInterval(speaker: "two", start: -0.2, end: 0.05)]
+    let ambiguous = LocalSpeakerSeparation.applying(competing, to: source, side: "me")
+    #expect(ambiguous.first?.speaker == "me unknown")
+    let silence = [TranscriptSegment(start: 3, end: 3.2, text: "Later", words: [TranscriptWord(start: 3, end: 3.2, text: "Later")])]
+    #expect(LocalSpeakerSeparation.applying(intervals, to: silence, side: "me").first?.speaker == "me unknown")
+    let tinyOverlap = [SpeakerInterval(speaker: "one", start: 0.14, end: 0.16)]
+    #expect(LocalSpeakerSeparation.applying(tinyOverlap, to: source, side: "me").first?.speaker == "me unknown")
+    let interiorIsland = [SpeakerInterval(speaker: "one", start: 0.05, end: 0.15)]
+    #expect(LocalSpeakerSeparation.applying(interiorIsland, to: source, side: "me").first?.speaker == "me unknown")
+    let tooFar = [SpeakerInterval(speaker: "one", start: 0.18, end: 1.82)]
+    #expect(LocalSpeakerSeparation.applying(tooFar, to: source, side: "me").first?.speaker == "me unknown")
+}

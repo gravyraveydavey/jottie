@@ -18,7 +18,7 @@ Codex uses ChatGPT authentication, an isolated temporary working directory, ephe
 
 ## Codex summary settings and checks
 
-The app menu's Settings command and the library's gear open the same Jottie settings. General contains the automatic Codex analysis switch, executable override, detected path/version and ChatGPT sign-in status. Recording settings now lives inside the main window and includes capture controls, permissions, startup and model management. See [directory, Trash and settings details](bamboohr-and-trash.md). The old Amanu provider-chain controls are hidden because they do not configure Jottie's native workflow.
+The app menu's Settings command and the library's gear open the same Jottie settings. General contains appearance, identity and startup preferences. Recording groups capture, transcription, voice learning and models. Summaries contains analysis/model choices and advanced prompts. Integrations groups calendar, BambooHR, Codex, Microsoft and MCP connections. The shared Advanced switch reveals specialist controls and voice diagnostics. See [settings layout](settings-layout.md). See [directory, Trash and settings details](bamboohr-and-trash.md). The old Amanu provider-chain controls are hidden because they do not configure Jottie's native workflow.
 
 Check Codex performs local version and sign-in checks without submitting a transcript. Test connection submits one small invented prompt and validates a structured response using the same runner as summaries. The equivalent CLI commands are `jottie codex` and `jottie codex --test`. Authentication checks use the CLI's `login status` command; see the [official CLI reference](https://learn.chatgpt.com/docs/cli/reference).
 

@@ -156,6 +156,7 @@ public struct Meeting: Codable, Sendable, Equatable, Identifiable {
     public var sourceMetadata: [String: String]?
     public var starred: Bool?
     public var calendarContext: CalendarEventContext?
+    public var dismissedCalendarTitle: String?
     public var calendarContextManuallySet: Bool?
     public var participantContext: [ParticipantIdentity]?
     public var speakerRoles: [String: String]?
@@ -177,7 +178,10 @@ public struct Meeting: Codable, Sendable, Equatable, Identifiable {
     public var speakerRevision: String {
         Codec.hash(((try? Codec.encode(speakerAttributions ?? [:])) ?? Data()) + ((try? Codec.encode(speakerNames)) ?? Data()) + ((try? Codec.encode(speakerRoles ?? [:])) ?? Data()))
     }
-    public var displayTitle: String { analysis?.analysis.title ?? title }
+    public var displayTitle: String {
+        if let analysed = analysis?.analysis.title, analysed != dismissedCalendarTitle { return analysed }
+        return title
+    }
     public var transcript: String {
         let names = displaySpeakerNames
         return segments.map { "[\($0.startMS / 60000):\(String(format: "%02d", $0.startMS / 1000 % 60))] \(names[$0.id] ?? "Unknown speaker"): \($0.text)" }
